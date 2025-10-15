@@ -1,0 +1,52 @@
+# Transformer 深度学习模型配置
+model:
+  class: Transformer
+  module_path: qlib.contrib.model.pytorch_transformer
+  kwargs:
+    # 模型结构参数
+    d_feat: 20
+    d_model: 64
+    n_head: 8
+    num_layers: 2
+    dropout: 0.1
+
+    # 训练参数
+    n_epochs: 100
+    lr: 0.001
+    early_stop: 20
+    batch_size: 2000
+    metric: loss
+    loss: mse
+    optimizer: adam
+
+    # 数据参数
+    seq_len: 20  # 序列长度
+    alpha: 360   # 特征数量（Alpha360）
+
+    # 正则化参数
+    l1: 0.0
+    l2: 0.0
+
+    # 其他参数
+    seed: 42
+    device: auto
+    verbose: true
+
+# 可调参数范围（用于超参数优化）
+tunable_params:
+  d_model: [32, 64, 128, 256]
+  n_head: [4, 8, 16]
+  num_layers: [1, 2, 3, 4]
+  dropout: [0.1, 0.2, 0.3, 0.4, 0.5]
+  lr: [0.0001, 0.001, 0.01, 0.1]
+  batch_size: [500, 1000, 2000, 4000]
+  seq_len: [10, 20, 30, 50]
+  l1: [0.0, 0.001, 0.01, 0.1]
+  l2: [0.0, 0.001, 0.01, 0.1]
+
+# 模型描述
+description: |
+  Transformer 注意力机制模型，在序列建模任务中表现优异。
+  能够并行处理序列数据，捕捉长距离依赖关系。
+  适合复杂的时序模式识别任务。
+

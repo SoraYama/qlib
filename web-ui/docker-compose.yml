@@ -1,0 +1,219 @@
+version: '3.8'
+
+services:
+  # Redis 服务（用于缓存和消息队列）
+  redis:
+    image: redis:7-alpine
+    container_name: crypto_trading_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+
+  # PostgreSQL 数据库（用于存储交易记录和配置）
+  postgres:
+    image: postgres:15-alpine
+    container_name: crypto_trading_postgres
+    environment:
+      POSTGRES_DB: crypto_trading
+      POSTGRES_USER: trading_user
+      POSTGRES_PASSWORD: trading_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+
+  # Flask 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crypto_trading_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/crypto_trading
+      - GATE_API_KEY=${GATE_API_KEY}
+      - GATE_API_SECRET=${GATE_API_SECRET}
+      - CRYPTOPANIC_API_KEY=${CRYPTOPANIC_API_KEY}
+    volumes:
+      - ../data:/app/data
+      - ../mlruns:/app/mlruns
+      - ../custom-scripts:/app/custom-scripts
+      - ../agent-docs:/app/agent-docs
+      - backend_logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: crypto_trading_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost/api
+      - REACT_APP_WS_URL=ws://localhost/ws
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: crypto_trading_nginx
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+
+  # 数据采集服务
+  data_collector:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crypto_trading_data_collector
+    command: python -m custom_scripts.scheduler
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/crypto_trading
+      - GATE_API_KEY=${GATE_API_KEY}
+      - GATE_API_SECRET=${GATE_API_SECRET}
+      - CRYPTOPANIC_API_KEY=${CRYPTOPANIC_API_KEY}
+    volumes:
+      - ../data:/app/data
+      - ../custom-scripts:/app/custom-scripts
+      - data_collector_logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+
+  # 实盘交易服务
+  live_trading:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crypto_trading_live_trading
+    command: python -m custom_scripts.live_trading_scheduler
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/crypto_trading
+      - GATE_API_KEY=${GATE_API_KEY}
+      - GATE_API_SECRET=${GATE_API_SECRET}
+      - TRADING_ENABLED=true
+    volumes:
+      - ../data:/app/data
+      - ../mlruns:/app/mlruns
+      - ../custom-scripts:/app/custom-scripts
+      - live_trading_logs:/app/logs
+    depends_on:
+      - redis
+      - postgres
+      - backend
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+    profiles:
+      - trading  # 使用 profile 来控制是否启动实盘交易
+
+  # 监控服务（可选）
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: crypto_trading_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+    profiles:
+      - monitoring
+
+  # Grafana 仪表盘（可选）
+  grafana:
+    image: grafana/grafana:latest
+    container_name: crypto_trading_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - crypto_trading_network
+    profiles:
+      - monitoring
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  backend_logs:
+    driver: local
+  data_collector_logs:
+    driver: local
+  live_trading_logs:
+    driver: local
+  nginx_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  crypto_trading_network:
+    driver: bridge
+

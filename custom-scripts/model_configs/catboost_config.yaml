@@ -1,0 +1,52 @@
+# CatBoost 模型配置
+model:
+  class: CatBoostModel
+  module_path: qlib.contrib.model.gbdt
+  kwargs:
+    # 基础参数
+    objective: RMSE
+    eval_metric: RMSE
+    iterations: 1000
+    learning_rate: 0.05
+
+    # 树结构参数
+    depth: 6
+    l2_leaf_reg: 3.0
+    min_data_in_leaf: 1
+    max_leaves: 31
+
+    # 正则化参数
+    rsm: 1.0
+    random_strength: 1.0
+    bagging_temperature: 1.0
+
+    # 特征处理
+    one_hot_max_size: 2
+    leaf_estimation_method: Newton
+    leaf_estimation_iterations: 1
+    leaf_estimation_backtracking: AnyImprovement
+
+    # 其他参数
+    random_seed: 42
+    thread_count: 20
+    verbose: false
+
+    # 早停参数
+    early_stopping_rounds: 50
+
+# 可调参数范围（用于超参数优化）
+tunable_params:
+  learning_rate: [0.01, 0.05, 0.1, 0.2]
+  depth: [3, 5, 7, 9, 12]
+  l2_leaf_reg: [1.0, 3.0, 5.0, 10.0, 20.0]
+  min_data_in_leaf: [1, 3, 5, 10, 20]
+  rsm: [0.5, 0.7, 0.8, 0.9, 1.0]
+  random_strength: [0.5, 1.0, 2.0, 5.0]
+  bagging_temperature: [0.5, 1.0, 2.0, 5.0]
+
+# 模型描述
+description: |
+  CatBoost 梯度提升模型，特别适合处理类别特征。
+  具有自动处理类别变量、内置正则化、抗过拟合的特点。
+  在表格数据上通常表现优异。
+

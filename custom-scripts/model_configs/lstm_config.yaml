@@ -1,0 +1,50 @@
+# LSTM 深度学习模型配置
+model:
+  class: LSTM
+  module_path: qlib.contrib.model.pytorch_lstm
+  kwargs:
+    # 模型结构参数
+    hidden_size: 64
+    num_layers: 2
+    dropout: 0.2
+    bidirectional: false
+
+    # 训练参数
+    n_epochs: 100
+    lr: 0.001
+    early_stop: 20
+    batch_size: 2000
+    metric: loss
+    loss: mse
+    optimizer: adam
+
+    # 数据参数
+    seq_len: 20  # 序列长度
+    alpha: 360   # 特征数量（Alpha360）
+
+    # 正则化参数
+    l1: 0.0
+    l2: 0.0
+
+    # 其他参数
+    seed: 42
+    device: auto
+    verbose: true
+
+# 可调参数范围（用于超参数优化）
+tunable_params:
+  hidden_size: [32, 64, 128, 256]
+  num_layers: [1, 2, 3, 4]
+  dropout: [0.1, 0.2, 0.3, 0.4, 0.5]
+  lr: [0.0001, 0.001, 0.01, 0.1]
+  batch_size: [500, 1000, 2000, 4000]
+  seq_len: [10, 20, 30, 50]
+  l1: [0.0, 0.001, 0.01, 0.1]
+  l2: [0.0, 0.001, 0.01, 0.1]
+
+# 模型描述
+description: |
+  LSTM 长短期记忆网络，适合处理时间序列数据。
+  能够捕捉长期依赖关系，适合加密货币价格的时间序列预测。
+  需要足够的历史数据来训练。
+
