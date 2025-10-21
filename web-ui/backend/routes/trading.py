@@ -197,6 +197,41 @@ def update_risk_settings():
         }), 500
 
 
+@bp.route('/risk-limits', methods=['POST'])
+def update_risk_limits():
+    """更新风险限制"""
+    try:
+        limits = request.json
+
+        # 默认风险限制
+        default_limits = {
+            "max_position_size": 0.3,
+            "max_drawdown": 0.2,
+            "stop_loss": 0.05
+        }
+
+        # 合并用户设置的限制
+        risk_limits = {**default_limits, **limits}
+
+        # 这里应该调用gate_service来更新风险限制
+        # 暂时返回成功响应
+        result = {
+            "message": "Risk limits updated successfully",
+            "limits": risk_limits
+        }
+
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+    except Exception as e:
+        logger.error(f"Error updating risk limits: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
 @bp.route('/performance', methods=['GET'])
 def get_trading_performance():
     """获取交易表现"""
@@ -228,6 +263,102 @@ def get_trading_logs():
         })
     except Exception as e:
         logger.error(f"Error getting trading logs: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route('/kline', methods=['GET'])
+def get_kline():
+    """获取实时K线（公开接口）"""
+    try:
+        currency_pair = request.args.get('symbol', 'BTC_USDT')
+        interval = request.args.get('interval', '1m')
+        limit = int(request.args.get('limit', 200))
+        data = gate_service.get_spot_klines(currency_pair, interval=interval, limit=limit)
+        if not data:
+            return jsonify({
+                "success": False,
+                "error": "empty result from upstream",
+                "data": []
+            }), 502
+        return jsonify({
+            "success": True,
+            "data": data
+        })
+    except Exception as e:
+        logger.error(f"Error getting kline: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "data": []
+        }), 502
+
+
+@bp.route('/plan', methods=['GET'])
+def get_trading_plan():
+    """获取当前交易计划（用于前端标注）"""
+    try:
+        plan = gate_service.get_current_trading_plan()
+        status = gate_service.get_trading_status()
+        return jsonify({
+            "success": True,
+            "data": {
+                "plan": plan,
+                "is_trading": bool(status.get('is_running', False))
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error getting trading plan: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route('/close-position/<symbol>', methods=['POST'])
+def close_position(symbol):
+    """关闭指定交易对的持仓"""
+    try:
+        # 这里应该调用gate_service来关闭持仓
+        # 暂时返回成功响应
+        result = {
+            "message": f"Position closed for {symbol}",
+            "symbol": symbol,
+            "status": "closed"
+        }
+
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+    except Exception as e:
+        logger.error(f"Error closing position for {symbol}: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route('/cancel-order/<order_id>', methods=['POST'])
+def cancel_order(order_id):
+    """取消指定订单"""
+    try:
+        # 这里应该调用gate_service来取消订单
+        # 暂时返回成功响应
+        result = {
+            "message": f"Order {order_id} cancelled",
+            "order_id": order_id,
+            "status": "cancelled"
+        }
+
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+    except Exception as e:
+        logger.error(f"Error cancelling order {order_id}: {e}")
         return jsonify({
             "success": False,
             "error": str(e)

@@ -39,6 +39,47 @@ def get_dashboard_summary():
         # 获取数据状态
         data_status = qlib_service.get_data_status()
 
+        # 直接检查数据目录是否存在（绕过 QlibService 的限制）
+        from pathlib import Path
+        qlib_data_dir = Path("~/.qlib/qlib_data/crypto_data").expanduser()
+        data_exists = qlib_data_dir.exists()
+
+        # 如果 QlibService 返回错误，但数据目录存在，则使用直接检查的结果
+        if 'error' in data_status and data_exists:
+            # 重新构建数据状态
+            data_status = {
+                "data_exists": True,
+                "instruments": [],
+                "date_range": {},
+                "features": []
+            }
+
+            # 获取交易对列表
+            instruments_file = qlib_data_dir / "instruments" / "all.txt"
+            if instruments_file.exists():
+                with open(instruments_file, 'r') as f:
+                    data_status["instruments"] = [line.strip() for line in f.readlines()]
+
+            # 获取日期范围
+            calendar_file = qlib_data_dir / "calendars" / "day.txt"
+            if calendar_file.exists():
+                with open(calendar_file, 'r') as f:
+                    dates = [line.strip() for line in f.readlines()]
+                    if dates:
+                        data_status["date_range"] = {
+                            "start": dates[0],
+                            "end": dates[-1],
+                            "total_days": len(dates)
+                        }
+
+            # 获取特征列表
+            features_dir = qlib_data_dir / "features"
+            if features_dir.exists():
+                for feature_file in features_dir.glob("**/*.bin"):
+                    feature_name = feature_file.stem
+                    if feature_name not in data_status["features"]:
+                        data_status["features"].append(feature_name)
+
         # 计算汇总数据
         total_balance = account_info.get('total_balance', 0) if isinstance(account_info, dict) else 0
         active_positions = len(positions) if isinstance(positions, list) else 0

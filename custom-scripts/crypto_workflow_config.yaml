@@ -5,7 +5,7 @@ market: &market all
 benchmark: &benchmark btcusdt
 data_handler_config: &data_handler_config
     start_time: 2024-01-01
-    end_time: 2025-10-12
+    end_time: 2025-10-15
     fit_start_time: 2024-01-01
     fit_end_time: 2024-08-31
     instruments: *market
@@ -33,7 +33,7 @@ port_analysis_config: &port_analysis_config
             n_drop: 0  # 不丢弃
     backtest:
         start_time: 2024-12-01
-        end_time: 2025-10-10
+        end_time: 2025-10-13
         account: 100000000
         benchmark: *benchmark
         exchange_kwargs:
@@ -67,7 +67,7 @@ task:
             segments:
                 train: [2024-01-01, 2024-08-31]  # 训练集
                 valid: [2024-09-01, 2024-11-30]  # 验证集
-                test: [2024-12-01, 2025-10-10]   # 测试集
+                test: [2024-12-01, 2025-10-13]   # 测试集
     record:
         - class: SignalRecord
           module_path: qlib.workflow.record_temp

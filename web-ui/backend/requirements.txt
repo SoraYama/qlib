@@ -17,3 +17,10 @@ requests==2.31.0
 # Environment
 python-dotenv==1.0.0
 
+# Data Collection Dependencies
+fire==0.7.1
+gate-api==7.1.8
+
+# Qlib Dependencies
+qlib==0.0.2.dev20
+

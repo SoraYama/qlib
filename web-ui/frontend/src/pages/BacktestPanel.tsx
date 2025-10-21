@@ -1,38 +1,43 @@
-import React, { useEffect } from 'react'
 import {
+  BarChartOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  EyeOutlined,
+  PlayCircleOutlined
+} from '@ant-design/icons'
+import {
+  Alert,
+  Button,
   Card,
-  Row,
   Col,
+  DatePicker,
   Form,
   Input,
   InputNumber,
+  Row,
   Select,
-  Button,
-  Table,
-  Tag,
   Space,
+  Spin,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
   Typography,
-  Alert,
-  DatePicker,
-  Tabs
+  message
 } from 'antd'
-import {
-  PlayCircleOutlined,
-  BarChartOutlined,
-  DownloadOutlined,
-  DeleteOutlined,
-  EyeOutlined
-} from '@ant-design/icons'
+import dayjs from 'dayjs'
+import React, { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { RootState, AppDispatch } from '../store'
+import EquityCurveChart from '../components/Charts/EquityCurveChart'
+import { AppDispatch, RootState } from '../store'
 import {
-  fetchBacktests,
-  runBacktest,
+  deleteBacktest,
+  fetchBacktestMetrics,
   fetchBacktestResult,
-  deleteBacktest
+  fetchBacktests,
+  runBacktest
 } from '../store/slices/backtestSlice'
 import { fetchModels } from '../store/slices/modelSlice'
-import dayjs from 'dayjs'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -43,6 +48,8 @@ const BacktestPanel: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>()
   const {
     results,
+    currentResult,
+    metrics,
     loading,
     running,
     error
@@ -50,27 +57,65 @@ const BacktestPanel: React.FC = () => {
   const { models } = useSelector((state: RootState) => state.model)
 
   const [form] = Form.useForm()
+  const [activeTab, setActiveTab] = useState('1')
 
   useEffect(() => {
     dispatch(fetchBacktests())
     dispatch(fetchModels())
   }, [dispatch])
 
-  const handleRunBacktest = () => {
+  const handleRunBacktest = async () => {
     const values = form.getFieldsValue()
-    const config = {
-      start_date: values.dateRange[0].format('YYYY-MM-DD'),
-      end_date: values.dateRange[1].format('YYYY-MM-DD'),
-      initial_capital: values.initial_capital,
-      transaction_cost: values.transaction_cost,
-      model_name: values.model_name,
-      strategy_name: values.strategy_name || 'default_strategy',
+
+    // 验证必填字段
+    if (!values.dateRange || !Array.isArray(values.dateRange) || values.dateRange.length !== 2) {
+      message.error('请选择有效的时间范围')
+      return
     }
-    dispatch(runBacktest(config))
+
+    if (!values.model_name) {
+      message.error('请选择模型')
+      return
+    }
+
+    if (!values.initial_capital) {
+      message.error('请输入初始资金')
+      return
+    }
+
+    if (values.transaction_cost === undefined || values.transaction_cost === null) {
+      message.error('请输入交易成本')
+      return
+    }
+
+    try {
+      const config = {
+        start_date: values.dateRange[0].format('YYYY-MM-DD'),
+        end_date: values.dateRange[1].format('YYYY-MM-DD'),
+        initial_capital: values.initial_capital,
+        transaction_cost: values.transaction_cost,
+        model_name: values.model_name,
+        strategy_name: values.strategy_name || 'default_strategy',
+      }
+
+      const result = await dispatch(runBacktest(config)).unwrap()
+
+      // 如果回测成功，自动获取指标并切换到结果分析页面
+      if (result && result.id) {
+        dispatch(fetchBacktestMetrics(result.id))
+        setActiveTab('3')
+        message.success('回测运行成功！')
+      }
+    } catch (error) {
+      console.error('运行回测时发生错误:', error)
+      message.error('运行回测时发生错误，请检查输入参数')
+    }
   }
 
   const handleViewResult = (resultId: string) => {
     dispatch(fetchBacktestResult(resultId))
+    dispatch(fetchBacktestMetrics(resultId))
+    setActiveTab('3') // 切换到结果分析标签页
   }
 
   const handleDeleteResult = (resultId: string) => {
@@ -119,11 +164,14 @@ const BacktestPanel: React.FC = () => {
       title: '总收益',
       dataIndex: ['metrics', 'total_return'],
       key: 'total_return',
-      render: (value: number) => (
-        <Text style={{ color: value >= 0 ? '#52c41a' : '#ff4d4f' }}>
-          {(value * 100).toFixed(2)}%
-        </Text>
-      ),
+      render: (value: number) => {
+        const returnValue = value || 0
+        return (
+          <Text style={{ color: returnValue >= 0 ? '#52c41a' : '#ff4d4f' }}>
+            {(returnValue * 100).toFixed(2)}%
+          </Text>
+        )
+      },
     },
     {
       title: '夏普比率',
@@ -139,11 +187,14 @@ const BacktestPanel: React.FC = () => {
       title: '最大回撤',
       dataIndex: ['metrics', 'max_drawdown'],
       key: 'max_drawdown',
-      render: (value: number) => (
-        <Text style={{ color: '#ff4d4f' }}>
-          {(value * 100).toFixed(2)}%
-        </Text>
-      ),
+      render: (value: number) => {
+        const drawdownValue = value || 0
+        return (
+          <Text style={{ color: '#ff4d4f' }}>
+            {(drawdownValue * 100).toFixed(2)}%
+          </Text>
+        )
+      },
     },
     {
       title: '创建时间',
@@ -201,7 +252,7 @@ const BacktestPanel: React.FC = () => {
         />
       )}
 
-      <Tabs defaultActiveKey="1">
+      <Tabs activeKey={activeTab} onChange={setActiveTab}>
         <TabPane tab="运行回测" key="1">
           <Row gutter={[16, 16]}>
             <Col xs={24} lg={12}>
@@ -341,11 +392,220 @@ const BacktestPanel: React.FC = () => {
         </TabPane>
 
         <TabPane tab="结果分析" key="3">
-          <Card title="回测结果分析">
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-              <Text type="secondary">请先选择一个回测结果进行分析</Text>
-            </div>
-          </Card>
+          {!currentResult ? (
+            <Card title="回测结果分析">
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <Text type="secondary">请先选择一个回测结果进行分析</Text>
+              </div>
+            </Card>
+          ) : !currentResult.metrics ? (
+            <Card title="回测结果分析">
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <Spin size="large" />
+                <div style={{ marginTop: 16 }}>
+                  <Text type="secondary">正在加载回测指标...</Text>
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* 关键指标卡片 */}
+              <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24} sm={12} lg={8}>
+                  <Card>
+                    <Statistic
+                      title="总收益"
+                      value={(currentResult.metrics?.total_return || 0) * 100}
+                      precision={2}
+                      suffix="%"
+                      valueStyle={{
+                        color: (currentResult.metrics?.total_return || 0) >= 0 ? '#3f8600' : '#cf1322'
+                      }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={8}>
+                  <Card>
+                    <Statistic
+                      title="年化收益"
+                      value={(currentResult.metrics?.annual_return || 0) * 100}
+                      precision={2}
+                      suffix="%"
+                      valueStyle={{
+                        color: (currentResult.metrics?.annual_return || 0) >= 0 ? '#3f8600' : '#cf1322'
+                      }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={8}>
+                  <Card>
+                    <Statistic
+                      title="夏普比率"
+                      value={currentResult.metrics?.sharpe_ratio || 0}
+                      precision={3}
+                      valueStyle={{ color: '#1890ff' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={8}>
+                  <Card>
+                    <Statistic
+                      title="最大回撤"
+                      value={Math.abs(currentResult.metrics?.max_drawdown || 0) * 100}
+                      precision={2}
+                      suffix="%"
+                      valueStyle={{ color: '#cf1322' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={8}>
+                  <Card>
+                    <Statistic
+                      title="胜率"
+                      value={(currentResult.metrics?.win_rate || 0) * 100}
+                      precision={2}
+                      suffix="%"
+                      valueStyle={{ color: '#52c41a' }}
+                    />
+                  </Card>
+                </Col>
+                <Col xs={24} sm={12} lg={8}>
+                  <Card>
+                    <Statistic
+                      title="盈亏比"
+                      value={currentResult.metrics?.profit_factor || 0}
+                      precision={2}
+                      valueStyle={{ color: '#722ed1' }}
+                    />
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* 收益曲线图 */}
+              <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                <Col xs={24}>
+                  <Card title="收益曲线">
+                    {loading || !metrics?.equity_curve ? (
+                      <div style={{ textAlign: 'center', padding: '100px 0' }}>
+                        <Spin size="large" />
+                      </div>
+                    ) : (
+                      <EquityCurveChart
+                        data={metrics.equity_curve}
+                        loading={loading}
+                        height={400}
+                      />
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+
+              {/* 交易记录表格 */}
+              <Row gutter={[16, 16]}>
+                <Col xs={24}>
+                  <Card title="交易记录">
+                    {loading || !metrics?.trades ? (
+                      <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                        <Spin size="large" />
+                      </div>
+                    ) : (
+                      <Table
+                        columns={[
+                          {
+                            title: '交易对',
+                            dataIndex: 'symbol',
+                            key: 'symbol',
+                            render: (symbol: string) => (
+                              <Text strong style={{ fontFamily: 'monospace' }}>
+                                {symbol}
+                              </Text>
+                            ),
+                          },
+                          {
+                            title: '方向',
+                            dataIndex: 'side',
+                            key: 'side',
+                            render: (side: string) => (
+                              <Tag color={side === 'buy' ? 'green' : 'red'}>
+                                {side === 'buy' ? '买入' : '卖出'}
+                              </Tag>
+                            ),
+                          },
+                          {
+                            title: '入场价格',
+                            dataIndex: 'entry_price',
+                            key: 'entry_price',
+                            render: (price: number) => (
+                              <Text style={{ fontFamily: 'monospace' }}>
+                                ${price?.toFixed(2)}
+                              </Text>
+                            ),
+                          },
+                          {
+                            title: '出场价格',
+                            dataIndex: 'exit_price',
+                            key: 'exit_price',
+                            render: (price: number) => (
+                              <Text style={{ fontFamily: 'monospace' }}>
+                                {price ? `$${price.toFixed(2)}` : '-'}
+                              </Text>
+                            ),
+                          },
+                          {
+                            title: '数量',
+                            dataIndex: 'amount',
+                            key: 'amount',
+                            render: (amount: number) => (
+                              <Text style={{ fontFamily: 'monospace' }}>
+                                {amount?.toFixed(6)}
+                              </Text>
+                            ),
+                          },
+                          {
+                            title: '盈亏',
+                            dataIndex: 'pnl',
+                            key: 'pnl',
+                            render: (pnl: number) => (
+                              <Text
+                                style={{
+                                  fontFamily: 'monospace',
+                                  color: pnl >= 0 ? '#52c41a' : '#ff4d4f'
+                                }}
+                              >
+                                {pnl >= 0 ? '+' : ''}${pnl?.toFixed(2)}
+                              </Text>
+                            ),
+                          },
+                          {
+                            title: '入场时间',
+                            dataIndex: 'entry_time',
+                            key: 'entry_time',
+                            render: (time: string) => dayjs(time).format('YYYY-MM-DD HH:mm'),
+                          },
+                          {
+                            title: '出场时间',
+                            dataIndex: 'exit_time',
+                            key: 'exit_time',
+                            render: (time: string) =>
+                              time ? dayjs(time).format('YYYY-MM-DD HH:mm') : '-',
+                          },
+                        ]}
+                        dataSource={metrics.trades}
+                        rowKey={(record, index) => `${record.symbol}_${index}`}
+                        pagination={{
+                          pageSize: 10,
+                          showSizeChanger: true,
+                          showQuickJumper: true,
+                          showTotal: (total, range) =>
+                            `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                        }}
+                      />
+                    )}
+                  </Card>
+                </Col>
+              </Row>
+            </>
+          )}
         </TabPane>
       </Tabs>
     </div>

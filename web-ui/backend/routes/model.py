@@ -11,13 +11,26 @@ from flask import Blueprint, request, jsonify
 from loguru import logger
 import pandas as pd
 
-# Add parent directory to path
+# Add custom-scripts directory to path
 CUR_DIR = Path(__file__).resolve().parent
-sys.path.append(str(CUR_DIR.parent.parent.parent / 'custom-scripts'))
+# Try multiple possible paths for custom-scripts
+possible_paths = [
+    CUR_DIR.parent.parent.parent / 'custom-scripts',  # Original path
+    Path('/app/custom-scripts'),  # Docker container path
+    Path('./custom-scripts'),  # Relative path
+]
+
+for path in possible_paths:
+    if path.exists():
+        sys.path.append(str(path))
+        logger.info(f"Added to Python path: {path}")
+        break
+else:
+    logger.warning("Could not find custom-scripts directory")
 
 from services.qlib_service import QlibService
 try:
-    from custom_scripts.model_manager import ModelManager
+    from model_manager import ModelManager
 except ImportError:
     # 如果无法导入，创建一个模拟的ModelManager
     class ModelManager:
@@ -40,7 +53,9 @@ model_manager = ModelManager()
 def list_models():
     """列出所有可用模型"""
     try:
+        logger.info(f"ModelManager type: {type(model_manager)}")
         models = model_manager.list_models()
+        logger.info(f"Models found: {models}")
         model_info = []
 
         for model_name in models:
@@ -49,15 +64,18 @@ def list_models():
                 "name": model_name,
                 "class": info["class"],
                 "description": info["description"],
-                "tunable_params": len(info["tunable_params"])
+                "tunable_params": list(info["tunable_params"].keys()) if isinstance(info["tunable_params"], dict) else info["tunable_params"]
             })
 
+        logger.info(f"Model info: {model_info}")
         return jsonify({
             "success": True,
             "data": model_info
         })
     except Exception as e:
         logger.error(f"Error listing models: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({
             "success": False,
             "error": str(e)
@@ -169,15 +187,39 @@ def train_model():
         # 创建训练配置
         config = model_manager.create_workflow_config(model_name)
 
-        # 运行训练
-        result = qlib_service.train_model(config)
+        # 启动异步训练任务
+        task = qlib_service.start_train_task(config)
+        if "error" in task:
+            return jsonify({
+                "success": False,
+                "error": task["error"]
+            }), 500
 
         return jsonify({
             "success": True,
-            "data": result
+            "data": task
         })
     except Exception as e:
         logger.error(f"Error training model: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route('/train/status/<task_id>', methods=['GET'])
+def get_train_status(task_id):
+    """查询训练任务状态"""
+    try:
+        status = qlib_service.get_train_status(task_id)
+        http_code = 200 if "error" not in status else 404
+        return jsonify({
+            "success": "error" not in status,
+            "data": status if "error" not in status else None,
+            "error": None if "error" not in status else status["error"]
+        }), http_code
+    except Exception as e:
+        logger.error(f"Error getting train status: {e}")
         return jsonify({
             "success": False,
             "error": str(e)

@@ -22,8 +22,8 @@ def generate_report():
     """生成报告"""
     # 定位artifacts目录
     mlruns_dir = Path(__file__).parent / "mlruns"
-    exp_id = "393200062037990974"
-    recorder_id = "70f9a3f3822d49359782f44acd7f8b52"
+    exp_id = "729227278726044682"
+    recorder_id = "5213f1bd7001492f8b44d8225818b602"
     artifacts_dir = mlruns_dir / exp_id / recorder_id / "artifacts"
 
     print(f"从目录加载数据: {artifacts_dir}")

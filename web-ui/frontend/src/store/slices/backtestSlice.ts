@@ -150,8 +150,13 @@ const backtestSlice = createSlice({
       })
       .addCase(runBacktest.fulfilled, (state, action: PayloadAction<BacktestResult>) => {
         state.running = false
-        state.results.unshift(action.payload)
-        state.currentResult = action.payload
+        // 检查返回的数据是否有效
+        if (action.payload && action.payload.id) {
+          state.results.unshift(action.payload)
+          state.currentResult = action.payload
+        } else {
+          state.error = '回测运行失败，请检查配置'
+        }
       })
       .addCase(runBacktest.rejected, (state, action) => {
         state.running = false

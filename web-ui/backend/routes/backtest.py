@@ -28,7 +28,12 @@ qlib_service = QlibService()
 def run_backtest():
     """运行回测"""
     try:
-        config = request.json.get('config', {})
+        # 获取请求数据，支持两种格式
+        request_data = request.json
+        if 'config' in request_data:
+            config = request_data['config']
+        else:
+            config = request_data
 
         # 默认配置
         default_config = {

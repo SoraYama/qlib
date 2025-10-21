@@ -44,6 +44,8 @@ interface TradingState {
   status: TradingStatus | null
   positions: Position[]
   orders: Order[]
+  kline: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>
+  plan: { plan: any; is_trading: boolean } | null
   loading: boolean
   error: string | null
   starting: boolean
@@ -54,6 +56,8 @@ const initialState: TradingState = {
   status: null,
   positions: [],
   orders: [],
+  kline: [],
+  plan: null,
   loading: false,
   error: null,
   starting: false,
@@ -122,6 +126,24 @@ export const cancelOrder = createAsyncThunk(
   async (orderId: string) => {
     const response = await api.post(`/trading/cancel-order/${orderId}`)
     return response.data.data
+  }
+)
+
+export const fetchKline = createAsyncThunk(
+  'trading/fetchKline',
+  async ({ symbol, interval, limit }: { symbol: string; interval: string; limit: number }) => {
+    const response = await api.get(`/trading/kline`, {
+      params: { symbol, interval, limit }
+    })
+    return response.data.data as Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>
+  }
+)
+
+export const fetchTradingPlan = createAsyncThunk(
+  'trading/fetchTradingPlan',
+  async () => {
+    const response = await api.get(`/trading/plan`)
+    return response.data.data as { plan: any; is_trading: boolean }
   }
 )
 
@@ -215,6 +237,16 @@ const tradingSlice = createSlice({
         if (state.status) {
           state.status.risk_limits = { ...state.status.risk_limits, ...action.payload }
         }
+      })
+
+      // 获取K线
+      .addCase(fetchKline.fulfilled, (state, action) => {
+        state.kline = action.payload
+      })
+
+      // 获取交易计划
+      .addCase(fetchTradingPlan.fulfilled, (state, action) => {
+        state.plan = action.payload
       })
   },
 })

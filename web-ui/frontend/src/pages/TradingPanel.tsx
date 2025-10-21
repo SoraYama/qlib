@@ -31,9 +31,12 @@ import {
   stopTrading,
   fetchPositions,
   fetchOrders,
-  updateRiskLimits
+  updateRiskLimits,
+  fetchKline,
+  fetchTradingPlan
 } from '../store/slices/tradingSlice'
 import { fetchModels } from '../store/slices/modelSlice'
+import KlineChart from '../components/Charts/KlineChart'
 
 const { Title, Text } = Typography
 const { TabPane } = Tabs
@@ -44,6 +47,8 @@ const TradingPanel: React.FC = () => {
     status,
     positions,
     orders,
+    kline,
+    plan,
     loading,
     starting,
     stopping,
@@ -58,6 +63,18 @@ const TradingPanel: React.FC = () => {
     dispatch(fetchPositions())
     dispatch(fetchOrders())
     dispatch(fetchModels())
+    dispatch(fetchKline({ symbol: 'BTC_USDT', interval: '1m', limit: 200 }))
+    dispatch(fetchTradingPlan())
+  }, [dispatch])
+
+  // 定时刷新 K 线与计划
+  useEffect(() => {
+    const timer = setInterval(() => {
+      dispatch(fetchKline({ symbol: 'BTC_USDT', interval: '1m', limit: 200 }))
+      dispatch(fetchTradingPlan())
+      dispatch(fetchTradingStatus())
+    }, 20_000)
+    return () => clearInterval(timer)
   }, [dispatch])
 
   const handleStartTrading = () => {
@@ -319,6 +336,9 @@ const TradingPanel: React.FC = () => {
       <Tabs defaultActiveKey="1">
         <TabPane tab="持仓管理" key="1">
           <Card title="当前持仓">
+            <div style={{ marginBottom: 16 }}>
+              <KlineChart data={kline} plan={plan?.plan} title={`实时K线 ${plan?.plan?.symbol || 'BTC_USDT'}（${status?.is_running ? '实盘运行中' : '未运行'}）`} />
+            </div>
             <Table
               columns={positionColumns}
               dataSource={positions}

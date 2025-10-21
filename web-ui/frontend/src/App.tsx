@@ -4,6 +4,10 @@ import { Layout } from 'antd'
 
 import AppLayout from './components/Layout/AppLayout'
 import Dashboard from './pages/Dashboard'
+import DataManager from './pages/DataManager'
+import ModelTrainer from './pages/ModelTrainer'
+import BacktestPanel from './pages/BacktestPanel'
+import TradingPanel from './pages/TradingPanel'
 
 const { Content } = Layout
 
@@ -14,10 +18,10 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/data" element={<div>数据管理页面开发中...</div>} />
-          <Route path="/model" element={<div>模型训练页面开发中...</div>} />
-          <Route path="/backtest" element={<div>回测分析页面开发中...</div>} />
-          <Route path="/trading" element={<div>实盘交易页面开发中...</div>} />
+          <Route path="/data" element={<DataManager />} />
+          <Route path="/model" element={<ModelTrainer />} />
+          <Route path="/backtest" element={<BacktestPanel />} />
+          <Route path="/trading" element={<TradingPanel />} />
         </Routes>
       </Content>
     </AppLayout>

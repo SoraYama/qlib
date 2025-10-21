@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Redis 服务（用于缓存和消息队列）
   redis:
@@ -52,6 +50,7 @@ services:
       - ../mlruns:/app/mlruns
       - ../custom-scripts:/app/custom-scripts
       - ../agent-docs:/app/agent-docs
+      - ~/.qlib:/root/.qlib
       - backend_logs:/app/logs
     depends_on:
       - redis
@@ -60,7 +59,7 @@ services:
     networks:
       - crypto_trading_network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -107,7 +106,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: crypto_trading_data_collector
-    command: python -m custom_scripts.scheduler
+    command: python /app/custom-scripts/scheduler.py
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://trading_user:trading_password@postgres:5432/crypto_trading

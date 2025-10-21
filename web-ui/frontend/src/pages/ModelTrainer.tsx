@@ -13,12 +13,15 @@ import {
   Typography,
   Alert,
   Progress,
-  Tabs
+  Tabs,
+  Checkbox,
+  Tooltip
 } from 'antd'
 import {
   PlayCircleOutlined,
   BarChartOutlined,
-  ThunderboltOutlined
+  ThunderboltOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState, AppDispatch } from '../store'
@@ -29,6 +32,8 @@ import {
   tuneHyperparameters,
   compareModels
 } from '../store/slices/modelSlice'
+import ModelComparisonRadar from '../components/Charts/ModelComparisonRadar'
+import ModelComparisonBar from '../components/Charts/ModelComparisonBar'
 
 const { Title, Text } = Typography
 const { Option } = Select
@@ -45,7 +50,19 @@ const ModelTrainer: React.FC = () => {
   } = useSelector((state: RootState) => state.model)
 
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [selectedModelsForComparison, setSelectedModelsForComparison] = useState<string[]>([])
+  const [comparisonData, setComparisonData] = useState<any>(null)
+  const [comparingModels, setComparingModels] = useState(false)
   const [form] = Form.useForm()
+
+  const labelWithTip = (labelText: string, tipText: string) => (
+    <span>
+      {labelText}
+      <Tooltip title={tipText} placement="right">
+        <InfoCircleOutlined style={{ marginLeft: 6, color: '#999' }} />
+      </Tooltip>
+    </span>
+  )
 
   useEffect(() => {
     dispatch(fetchModels())
@@ -71,6 +88,35 @@ const ModelTrainer: React.FC = () => {
 
   const handleTune = () => {
     dispatch(tuneHyperparameters({ modelName: selectedModel }))
+  }
+
+  const handleCompareModels = async () => {
+    if (selectedModelsForComparison.length < 2) {
+      return
+    }
+    setComparingModels(true)
+    try {
+      const result = await dispatch(compareModels(selectedModelsForComparison)).unwrap()
+      // 规范化后端返回的数据结构，适配 {model_name, metrics:{...}} 或扁平结构
+      const normalize = (arr: any[]) => (arr || []).map((it: any) => {
+        const name = it?.model_name || it?.name || it?.model || 'unknown'
+        const metrics = it?.metrics || {
+          accuracy: it?.accuracy,
+          precision: it?.precision,
+          recall: it?.recall,
+          f1_score: it?.f1_score || it?.f1,
+          sharpe_ratio: it?.sharpe_ratio || it?.sharpe,
+          max_drawdown: it?.max_drawdown || it?.mdd,
+          annual_return: it?.annual_return || it?.annualized_return,
+        }
+        return { model_name: name, metrics: metrics || {} }
+      })
+      setComparisonData(normalize(result))
+    } catch (error) {
+      console.error('模型对比失败:', error)
+    } finally {
+      setComparingModels(false)
+    }
   }
 
   const modelColumns = [
@@ -187,7 +233,7 @@ const ModelTrainer: React.FC = () => {
 
                   {selectedModel && (
                     <>
-                      <Form.Item label="学习率" name="learning_rate">
+                      <Form.Item label={labelWithTip('学习率', '每次参数更新的步长，过大易震荡，过小收敛慢')} name="learning_rate">
                         <InputNumber
                           min={0.001}
                           max={1}
@@ -195,21 +241,21 @@ const ModelTrainer: React.FC = () => {
                           style={{ width: '100%' }}
                         />
                       </Form.Item>
-                      <Form.Item label="最大深度" name="max_depth">
+                      <Form.Item label={labelWithTip('最大深度', '决策树最大深度，增大可拟合更复杂模式但易过拟合')} name="max_depth">
                         <InputNumber
                           min={3}
                           max={20}
                           style={{ width: '100%' }}
                         />
                       </Form.Item>
-                      <Form.Item label="叶子节点数" name="num_leaves">
+                      <Form.Item label={labelWithTip('叶子节点数', '树的叶子数量上限，数值越大模型复杂度越高')} name="num_leaves">
                         <InputNumber
                           min={10}
                           max={500}
                           style={{ width: '100%' }}
                         />
                       </Form.Item>
-                      <Form.Item label="子样本比例" name="subsample">
+                      <Form.Item label={labelWithTip('子样本比例', '每次训练使用的数据子样本比例，有助于降低过拟合')} name="subsample">
                         <InputNumber
                           min={0.1}
                           max={1}
@@ -299,19 +345,179 @@ const ModelTrainer: React.FC = () => {
         </TabPane>
 
         <TabPane tab="模型对比" key="3">
-          <Card title="模型性能对比">
-            <Button
-              type="primary"
-              icon={<BarChartOutlined />}
-              onClick={() => dispatch(compareModels())}
-              loading={loading}
-            >
-              生成对比报告
-            </Button>
-            <div style={{ marginTop: 16 }}>
-              <Text type="secondary">模型对比功能开发中...</Text>
-            </div>
-          </Card>
+          <Row gutter={[16, 16]}>
+            <Col xs={24}>
+              <Card title="选择对比模型">
+                <div style={{ marginBottom: 16 }}>
+                  <Text type="secondary">请选择至少2个模型进行对比：</Text>
+                </div>
+                <Checkbox.Group
+                  value={selectedModelsForComparison}
+                  onChange={(values) => setSelectedModelsForComparison(values as string[])}
+                  style={{ width: '100%' }}
+                >
+                  <Row>
+                    {models.map(model => (
+                      <Col xs={24} sm={12} md={8} key={model.name} style={{ marginBottom: 8 }}>
+                        <Checkbox value={model.name}>
+                          <Tag color="blue">{model.name}</Tag>
+                        </Checkbox>
+                      </Col>
+                    ))}
+                  </Row>
+                </Checkbox.Group>
+                <div style={{ marginTop: 16 }}>
+                  <Button
+                    type="primary"
+                    icon={<BarChartOutlined />}
+                    onClick={handleCompareModels}
+                    loading={comparingModels}
+                    disabled={selectedModelsForComparison.length < 2}
+                  >
+                    生成对比报告
+                  </Button>
+                  {selectedModelsForComparison.length < 2 && (
+                    <Text type="secondary" style={{ marginLeft: 16 }}>
+                      已选择 {selectedModelsForComparison.length} 个模型，至少需要 2 个
+                    </Text>
+                  )}
+                </div>
+              </Card>
+            </Col>
+
+            {comparisonData && (
+              <>
+                {/* 性能对比表格 */}
+                <Col xs={24}>
+                  <Card title="性能指标对比">
+                    <Table
+                      columns={[
+                        {
+                          title: '指标',
+                          dataIndex: 'metric',
+                          key: 'metric',
+                          fixed: 'left',
+                          width: 120,
+                        },
+                        ...selectedModelsForComparison.map(modelName => ({
+                          title: modelName,
+                          dataIndex: modelName,
+                          key: modelName,
+                          render: (value: number, record: any) => {
+                            // 找出该指标的最优值
+                            const values = selectedModelsForComparison.map(name => record[name])
+                            const maxValue = Math.max(...values)
+                            const isMax = value === maxValue
+                            return (
+                              <Text
+                                strong={isMax}
+                                style={{
+                                  fontFamily: 'monospace',
+                                  color: isMax ? '#52c41a' : undefined
+                                }}
+                              >
+                                {typeof value === 'number' ? value.toFixed(4) : value}
+                              </Text>
+                            )
+                          },
+                        }))
+                      ]}
+                      dataSource={[
+                        {
+                          metric: '准确率',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.accuracy
+                            ])
+                          )
+                        },
+                        {
+                          metric: '精确率',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.precision
+                            ])
+                          )
+                        },
+                        {
+                          metric: '召回率',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.recall
+                            ])
+                          )
+                        },
+                        {
+                          metric: 'F1分数',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.f1_score
+                            ])
+                          )
+                        },
+                        {
+                          metric: '夏普比率',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.sharpe_ratio
+                            ])
+                          )
+                        },
+                        {
+                          metric: '最大回撤',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.max_drawdown
+                            ])
+                          )
+                        },
+                        {
+                          metric: '年化收益',
+                          ...Object.fromEntries(
+                            comparisonData.map((item: any) => [
+                              item.model_name,
+                              item.metrics.annual_return
+                            ])
+                          )
+                        }
+                      ]}
+                      rowKey="metric"
+                      pagination={false}
+                      scroll={{ x: true }}
+                    />
+                  </Card>
+                </Col>
+
+                {/* 雷达图 */}
+                <Col xs={24} lg={12}>
+                  <Card title="多维度性能对比">
+                    <ModelComparisonRadar
+                      data={comparisonData}
+                      loading={comparingModels}
+                      height={500}
+                    />
+                  </Card>
+                </Col>
+
+                {/* 柱状图 */}
+                <Col xs={24} lg={12}>
+                  <Card title="指标对比">
+                    <ModelComparisonBar
+                      data={comparisonData}
+                      loading={comparingModels}
+                      height={500}
+                    />
+                  </Card>
+                </Col>
+              </>
+            )}
+          </Row>
         </TabPane>
       </Tabs>
     </div>

@@ -1,0 +1,27 @@
+2025-10-17 07:47:01.074 | WARNING  | services.qlib_service:<module>:29 - Qlib not available. Some features will be disabled.
+2025-10-17 07:47:01.074 | INFO     | services.qlib_service:__init__:44 - QlibService initialized
+2025-10-17 07:47:01.083 | WARNING  | model_manager:<module>:28 - Optuna not available. Hyperparameter tuning will be disabled.
+2025-10-17 07:47:01.083 | INFO     | services.qlib_service:__init__:44 - QlibService initialized
+2025-10-17 07:47:01.087 | INFO     | model_manager:_load_model_configs:66 - Loaded model config: lgb
+2025-10-17 07:47:01.090 | INFO     | model_manager:_load_model_configs:66 - Loaded model config: transformer
+2025-10-17 07:47:01.093 | INFO     | model_manager:_load_model_configs:66 - Loaded model config: lstm
+2025-10-17 07:47:01.095 | INFO     | model_manager:_load_model_configs:66 - Loaded model config: xgb
+2025-10-17 07:47:01.098 | INFO     | model_manager:_load_model_configs:66 - Loaded model config: catboost
+2025-10-17 07:47:01.098 | INFO     | model_manager:__init__:51 - ModelManager initialized with 5 models
+2025-10-17 07:47:01.098 | INFO     | services.qlib_service:__init__:44 - QlibService initialized
+2025-10-17 07:47:01.099 | WARNING  | services.gate_service:<module>:26 - Gate.io API not available. Trading features will be disabled.
+2025-10-17 07:47:01.099 | INFO     | services.gate_service:__init__:43 - GateService initialized
+2025-10-17 07:47:01.099 | INFO     | services.gate_service:__init__:43 - GateService initialized
+2025-10-17 07:47:01.099 | INFO     | services.qlib_service:__init__:44 - QlibService initialized
+2025-10-17 07:47:01.117 | INFO     | __main__:<module>:106 - Starting Flask app on port 5000
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://207.148.118.136:5000
+Press CTRL+C to quit
+2025-10-17 07:47:06.622 | INFO     | routes.model:list_models:43 - ModelManager type: <class 'model_manager.ModelManager'>
+2025-10-17 07:47:06.622 | INFO     | routes.model:list_models:45 - Models found: ['lgb', 'transformer', 'lstm', 'xgb', 'catboost']
+2025-10-17 07:47:06.622 | INFO     | routes.model:list_models:57 - Model info: [{'name': 'lgb', 'class': 'LGBModel', 'description': 'LightGBM 梯度提升决策树模型，适合处理表格数据。\n具有训练速度快、内存占用少、准确率高的特点。\n适合加密货币价格预测任务。\n', 'tunable_params': ['learning_rate', 'num_leaves', 'max_depth', 'feature_fraction', 'bagging_fraction', 'bagging_freq', 'lambda_l1', 'lambda_l2', 'min_data_in_leaf']}, {'name': 'transformer', 'class': 'Transformer', 'description': 'Transformer 注意力机制模型，在序列建模任务中表现优异。\n能够并行处理序列数据，捕捉长距离依赖关系。\n适合复杂的时序模式识别任务。\n', 'tunable_params': ['d_model', 'n_head', 'num_layers', 'dropout', 'lr', 'batch_size', 'seq_len', 'l1', 'l2']}, {'name': 'lstm', 'class': 'LSTM', 'description': 'LSTM 长短期记忆网络，适合处理时间序列数据。\n能够捕捉长期依赖关系，适合加密货币价格的时间序列预测。\n需要足够的历史数据来训练。\n', 'tunable_params': ['hidden_size', 'num_layers', 'dropout', 'lr', 'batch_size', 'seq_len', 'l1', 'l2']}, {'name': 'xgb', 'class': 'XGBModel', 'description': 'XGBoost 极端梯度提升模型，在机器学习竞赛中表现优异。\n具有强大的特征选择能力和良好的泛化性能。\n适合处理复杂的非线性关系。\n', 'tunable_params': ['learning_rate', 'max_depth', 'min_child_weight', 'subsample', 'colsample_bytree', 'reg_alpha', 'reg_lambda', 'gamma']}, {'name': 'catboost', 'class': 'CatBoostModel', 'description': 'CatBoost 梯度提升模型，特别适合处理类别特征。\n具有自动处理类别变量、内置正则化、抗过拟合的特点。\n在表格数据上通常表现优异。\n', 'tunable_params': ['learning_rate', 'depth', 'l2_leaf_reg', 'min_data_in_leaf', 'rsm', 'random_strength', 'bagging_temperature']}]
+127.0.0.1 - - [17/Oct/2025 07:47:06] "GET /api/model/list HTTP/1.1" 200 -
