@@ -131,8 +131,12 @@ class GateService:
                     "stop_loss": 0.05
                 }
 
-            # 这里应该实现启动交易策略的逻辑
-            # 包括加载模型、设置风险参数、启动定时任务等
+            # 启动交易执行逻辑
+            import threading
+            if not hasattr(self, 'trading_thread') or not self.trading_thread.is_alive():
+                self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
+                self.trading_thread.start()
+                logger.info("Trading thread started")
 
             self.trading_logs.append({
                 "timestamp": datetime.now().isoformat(),
@@ -142,14 +146,118 @@ class GateService:
 
             return {
                 "success": True,
-                "message": "Trading started successfully",
+                "message": "Trading started successfully. Background trading loop is running.",
                 "config": config,
-                "strategy_name": self.current_strategy
+                "strategy_name": self.current_strategy,
+                "note": "Trading signals will be generated automatically based on market conditions."
             }
 
         except Exception as e:
             logger.error(f"Error starting trading: {e}")
             return {"error": str(e)}
+
+    def _trading_loop(self):
+        """交易执行循环（后台线程）"""
+        import time
+
+        logger.info("Trading loop started")
+        prediction_interval = 300  # 5分钟生成一次信号
+
+        while self.is_running:
+            try:
+                logger.info("Trading loop iteration - checking for trading opportunities...")
+
+                # 1. 获取市场数据
+                market_data = self.get_spot_klines('BTC_USDT', '15m', 100)
+                if not market_data:
+                    logger.warning("No market data available")
+                    time.sleep(60)
+                    continue
+
+                # 2. 生成简单的交易信号（示例：基于价格变化）
+                # 注意：这是一个简化示例，实际应该使用训练好的模型
+                signal = self._generate_simple_signal(market_data)
+
+                if signal:
+                    logger.info(f"Trading signal generated: {signal}")
+
+                    # 3. 应用风险控制
+                    if self._check_risk_limits():
+                        # 4. 执行交易（演示模式：只记录不实际执行）
+                        self.trading_logs.append({
+                            "timestamp": datetime.now().isoformat(),
+                            "level": "INFO",
+                            "message": f"Trading signal detected: {signal['action']} at {signal.get('price', 'market')} (DEMO MODE - not executed)"
+                        })
+                        logger.info(f"Demo mode: Would execute {signal['action']} order")
+                    else:
+                        logger.warning("Signal rejected by risk controls")
+
+                # 等待下一次迭代
+                time.sleep(prediction_interval)
+
+            except Exception as e:
+                logger.error(f"Error in trading loop: {e}")
+                time.sleep(60)  # 出错后等待1分钟再重试
+
+        logger.info("Trading loop stopped")
+
+    def _generate_simple_signal(self, market_data: List[Dict]) -> Optional[Dict[str, Any]]:
+        """生成简单的交易信号（演示用）"""
+        try:
+            if len(market_data) < 20:
+                return None
+
+            # 计算简单移动平均
+            recent_prices = [float(k['close']) for k in market_data[-20:]]  # 收盘价
+            ma_short = sum(recent_prices[-5:]) / 5
+            ma_long = sum(recent_prices[-20:]) / 20
+            current_price = recent_prices[-1]
+
+            # 简单的金叉/死叉策略
+            if ma_short > ma_long * 1.01:  # 短期均线上穿长期均线
+                return {
+                    "action": "buy",
+                    "symbol": "BTC_USDT",
+                    "price": current_price,
+                    "reason": "MA crossover bullish"
+                }
+            elif ma_short < ma_long * 0.99:  # 短期均线下穿长期均线
+                return {
+                    "action": "sell",
+                    "symbol": "BTC_USDT",
+                    "price": current_price,
+                    "reason": "MA crossover bearish"
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error generating signal: {e}")
+            return None
+
+    def _check_risk_limits(self) -> bool:
+        """检查风险限制"""
+        try:
+            # 获取当前持仓
+            positions = self.get_positions()
+
+            # 检查持仓数量限制
+            if len(positions) >= 3:  # 最多持有3个仓位
+                logger.warning("Maximum positions reached")
+                return False
+
+            # 检查账户余额
+            balance = self.get_account_balance()
+            if balance.get('available_balance', 0) < 100:  # 最少保留100 USDT
+                logger.warning("Insufficient balance")
+                return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error checking risk limits: {e}")
+            return False
 
     def stop_trading(self) -> Dict[str, Any]:
         """停止实盘交易"""
@@ -182,7 +290,7 @@ class GateService:
                 return []
 
             # 调用 Gate.io 合约 API 获取持仓信息（usdt 结算）
-            positions = self.futures_api.list_futures_positions(settle='usdt')
+            positions = self.futures_api.list_positions(settle='usdt')
 
             position_list = []
             for position in positions:
@@ -209,14 +317,25 @@ class GateService:
             logger.error(f"Error getting positions: {e}")
             return []
 
-    def get_orders(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-        """获取订单历史"""
+    def get_orders(self, limit: int = 100, offset: int = 0, status: str = 'finished') -> List[Dict[str, Any]]:
+        """获取订单历史
+
+        Parameters
+        ----------
+        limit : int
+            返回订单数量限制
+        offset : int
+            偏移量
+        status : str
+            订单状态: 'open' (未完成), 'finished' (已完成)
+        """
         try:
             if not self.trading_enabled:
                 return []
 
             # 调用 Gate.io 合约 API 获取订单历史（usdt 结算）
-            orders = self.futures_api.list_futures_orders(settle='usdt', limit=limit, offset=offset)
+            # status 参数是必需的：'open' 或 'finished'
+            orders = self.futures_api.list_futures_orders(settle='usdt', status=status, limit=limit, offset=offset)
 
             order_list = []
             for order in orders:
