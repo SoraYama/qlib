@@ -1,0 +1,18 @@
+2025-10-21 02:48:27.637 | INFO     | __main__:<module>:106 - Starting Flask app on port 5000
+2025-10-21 02:49:10.711 | INFO     | __main__:<module>:106 - Starting Flask app on port 5000
+2025-10-21 02:49:49.112 | INFO     | __main__:<module>:106 - Starting Flask app on port 5000
+2025-10-21 02:49:55.225 | INFO     | __main__:<module>:106 - Starting Flask app on port 5001
+2025-10-21 02:50:08.801 | INFO     | model_manager:update_params:119 - Updated parameters for lgb: {'learning_rate': 0.1}
+2025-10-21 02:50:29.273 | INFO     | model_manager:update_params:119 - Updated parameters for lgb: {'learning_rate': 0.1}
+2025-10-21 02:50:34.759 | INFO     | services.qlib_service:cancel_train_task:193 - Training task fc5b9868-2886-410f-ba06-0338936b92d2 marked for cancellation
+2025-10-21 02:59:49.862 | INFO     | __main__:<module>:106 - Starting Flask app on port 5001
+2025-10-21 03:20:57.781 | INFO     | __main__:<module>:106 - Starting Flask app on port 5001
+2025-10-21 03:21:17.354 | INFO     | model_manager:update_params:119 - Updated parameters for lgb: {'learning_rate': 0.1}
+2025-10-21 03:21:50.515 | INFO     | routes.model:list_models:56 - ModelManager type: <class 'model_manager.ModelManager'>
+2025-10-21 03:21:50.515 | INFO     | routes.model:list_models:58 - Models found: ['lgb', 'transformer', 'lstm', 'xgb', 'catboost']
+2025-10-21 03:21:50.516 | INFO     | routes.model:list_models:70 - Model info: [{'name': 'lgb', 'class': 'LGBModel', 'description': 'LightGBM 梯度提升决策树模型，适合处理表格数据。\n具有训练速度快、内存占用少、准确率高的特点。\n适合加密货币价格预测任务。\n', 'tunable_params': ['learning_rate', 'num_leaves', 'max_depth', 'feature_fraction', 'bagging_fraction', 'bagging_freq', 'lambda_l1', 'lambda_l2', 'min_data_in_leaf']}, {'name': 'transformer', 'class': 'Transformer', 'description': 'Transformer 注意力机制模型，在序列建模任务中表现优异。\n能够并行处理序列数据，捕捉长距离依赖关系。\n适合复杂的时序模式识别任务。\n', 'tunable_params': ['d_model', 'n_head', 'num_layers', 'dropout', 'lr', 'batch_size', 'seq_len', 'l1', 'l2']}, {'name': 'lstm', 'class': 'LSTM', 'description': 'LSTM 长短期记忆网络，适合处理时间序列数据。\n能够捕捉长期依赖关系，适合加密货币价格的时间序列预测。\n需要足够的历史数据来训练。\n', 'tunable_params': ['hidden_size', 'num_layers', 'dropout', 'lr', 'batch_size', 'seq_len', 'l1', 'l2']}, {'name': 'xgb', 'class': 'XGBModel', 'description': 'XGBoost 极端梯度提升模型，在机器学习竞赛中表现优异。\n具有强大的特征选择能力和良好的泛化性能。\n适合处理复杂的非线性关系。\n', 'tunable_params': ['learning_rate', 'max_depth', 'min_child_weight', 'subsample', 'colsample_bytree', 'reg_alpha', 'reg_lambda', 'gamma']}, {'name': 'catboost', 'class': 'CatBoostModel', 'description': 'CatBoost 梯度提升模型，特别适合处理类别特征。\n具有自动处理类别变量、内置正则化、抗过拟合的特点。\n在表格数据上通常表现优异。\n', 'tunable_params': ['learning_rate', 'depth', 'l2_leaf_reg', 'min_data_in_leaf', 'rsm', 'random_strength', 'bagging_temperature']}]
+2025-10-21 03:22:01.197 | INFO     | __main__:<module>:106 - Starting Flask app on port 5001
+2025-10-21 03:22:12.537 | INFO     | model_manager:update_params:119 - Updated parameters for lgb: {'learning_rate': 0.1}
+2025-10-21 03:22:36.716 | INFO     | __main__:<module>:106 - Starting Flask app on port 5001
+2025-10-21 03:22:47.620 | INFO     | model_manager:update_params:119 - Updated parameters for lgb: {'learning_rate': 0.1}
+2025-10-21 03:23:00.797 | INFO     | services.qlib_service:cancel_train_task:193 - Training task 929a0370-bf5b-4f09-b188-0c2539b4b030 marked for cancellation

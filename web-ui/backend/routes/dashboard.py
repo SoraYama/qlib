@@ -16,15 +16,10 @@ from datetime import datetime
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent.parent / 'custom-scripts'))
 
-from services.gate_service import GateService
-from services.qlib_service import QlibService
+from shared_services import gate_service, qlib_service
 
 # Create blueprint
 bp = Blueprint('dashboard', __name__)
-
-# Initialize services
-gate_service = GateService()
-qlib_service = QlibService()
 
 
 @bp.route('/summary', methods=['GET'])

@@ -19,6 +19,19 @@ export interface ModelPerformance {
   annual_return: number
 }
 
+export interface TrainingTask {
+  task_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'cancelling'
+  progress: number
+  current_stage: string
+  result: any
+  error: string | null
+  created_at: string
+  updated_at: string
+  config: any
+  cancelled: boolean
+}
+
 interface ModelState {
   models: ModelInfo[]
   currentModel: string | null
@@ -27,6 +40,8 @@ interface ModelState {
   error: string | null
   training: boolean
   predicting: boolean
+  currentTask: TrainingTask | null
+  taskList: TrainingTask[]
 }
 
 const initialState: ModelState = {
@@ -37,6 +52,8 @@ const initialState: ModelState = {
   error: null,
   training: false,
   predicting: false,
+  currentTask: null,
+  taskList: [],
 }
 
 // 异步操作
@@ -125,6 +142,31 @@ export const compareModels = createAsyncThunk(
   }
 )
 
+// 训练任务相关操作
+export const fetchTrainingTasks = createAsyncThunk(
+  'model/fetchTrainingTasks',
+  async () => {
+    const response = await api.get('/model/train/tasks')
+    return response.data.data || []
+  }
+)
+
+export const fetchTrainingStatus = createAsyncThunk(
+  'model/fetchTrainingStatus',
+  async (taskId: string) => {
+    const response = await api.get(`/model/train/status/${taskId}`)
+    return response.data.data
+  }
+)
+
+export const cancelTrainingTask = createAsyncThunk(
+  'model/cancelTrainingTask',
+  async (taskId: string) => {
+    const response = await api.post(`/model/train/cancel/${taskId}`)
+    return response.data.data
+  }
+)
+
 const modelSlice = createSlice({
   name: 'model',
   initialState,
@@ -134,6 +176,23 @@ const modelSlice = createSlice({
     },
     setCurrentModel: (state, action: PayloadAction<string>) => {
       state.currentModel = action.payload
+    },
+    setCurrentTask: (state, action: PayloadAction<TrainingTask | null>) => {
+      state.currentTask = action.payload
+    },
+    updateTaskStatus: (state, action: PayloadAction<TrainingTask>) => {
+      const task = action.payload
+      // 更新当前任务
+      if (state.currentTask && state.currentTask.task_id === task.task_id) {
+        state.currentTask = task
+      }
+      // 更新任务列表
+      const index = state.taskList.findIndex(t => t.task_id === task.task_id)
+      if (index !== -1) {
+        state.taskList[index] = task
+      } else {
+        state.taskList.unshift(task)
+      }
     },
   },
   extraReducers: (builder) => {
@@ -171,8 +230,23 @@ const modelSlice = createSlice({
         state.training = true
         state.error = null
       })
-      .addCase(trainModel.fulfilled, (state) => {
+      .addCase(trainModel.fulfilled, (state, action) => {
         state.training = false
+        // 设置当前任务ID，等待状态更新
+        if (action.payload && action.payload.task_id) {
+          state.currentTask = {
+            task_id: action.payload.task_id,
+            status: 'pending',
+            progress: 0,
+            current_stage: '初始化中',
+            result: null,
+            error: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            config: {},
+            cancelled: false
+          }
+        }
       })
       .addCase(trainModel.rejected, (state, action) => {
         state.training = false
@@ -218,8 +292,45 @@ const modelSlice = createSlice({
         state.loading = false
         state.error = action.error.message || '获取模型性能失败'
       })
+
+      // 获取训练任务列表
+      .addCase(fetchTrainingTasks.fulfilled, (state, action: PayloadAction<TrainingTask[]>) => {
+        state.taskList = action.payload
+      })
+
+      // 获取训练状态
+      .addCase(fetchTrainingStatus.fulfilled, (state, action: PayloadAction<TrainingTask>) => {
+        const task = action.payload
+        // 更新当前任务
+        if (state.currentTask && state.currentTask.task_id === task.task_id) {
+          state.currentTask = task
+        }
+        // 更新任务列表
+        const index = state.taskList.findIndex(t => t.task_id === task.task_id)
+        if (index !== -1) {
+          state.taskList[index] = task
+        } else {
+          state.taskList.unshift(task)
+        }
+      })
+
+      // 取消训练任务
+      .addCase(cancelTrainingTask.fulfilled, (state, action) => {
+        const taskId = action.meta.arg
+        // 更新当前任务状态
+        if (state.currentTask && state.currentTask.task_id === taskId) {
+          state.currentTask.status = 'cancelling'
+          state.currentTask.current_stage = '正在取消训练...'
+        }
+        // 更新任务列表
+        const index = state.taskList.findIndex(t => t.task_id === taskId)
+        if (index !== -1) {
+          state.taskList[index].status = 'cancelling'
+          state.taskList[index].current_stage = '正在取消训练...'
+        }
+      })
   },
 })
 
-export const { clearError, setCurrentModel } = modelSlice.actions
+export const { clearError, setCurrentModel, setCurrentTask, updateTaskStatus } = modelSlice.actions
 export default modelSlice.reducer

@@ -15,13 +15,10 @@ import pandas as pd
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent.parent / 'custom-scripts'))
 
-from services.gate_service import GateService
+from shared_services import gate_service
 
 # Create blueprint
 bp = Blueprint('trading', __name__)
-
-# Initialize service
-gate_service = GateService()
 
 
 @bp.route('/status', methods=['GET'])

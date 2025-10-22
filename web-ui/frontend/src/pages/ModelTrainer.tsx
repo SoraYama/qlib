@@ -21,7 +21,9 @@ import {
   PlayCircleOutlined,
   BarChartOutlined,
   ThunderboltOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  StopOutlined,
+  ReloadOutlined
 } from '@ant-design/icons'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState, AppDispatch } from '../store'
@@ -30,7 +32,9 @@ import {
   fetchModelPerformance,
   trainModel,
   tuneHyperparameters,
-  compareModels
+  compareModels,
+  fetchTrainingTasks,
+  cancelTrainingTask
 } from '../store/slices/modelSlice'
 import ModelComparisonRadar from '../components/Charts/ModelComparisonRadar'
 import ModelComparisonBar from '../components/Charts/ModelComparisonBar'
@@ -43,10 +47,10 @@ const ModelTrainer: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>()
   const {
     models,
-    performance,
     loading,
     training,
-    error
+    error,
+    taskList
   } = useSelector((state: RootState) => state.model)
 
   const [selectedModel, setSelectedModel] = useState<string>('')
@@ -54,6 +58,7 @@ const ModelTrainer: React.FC = () => {
   const [comparisonData, setComparisonData] = useState<any>(null)
   const [comparingModels, setComparingModels] = useState(false)
   const [form] = Form.useForm()
+  const [progressInterval, setProgressInterval] = useState<number | null>(null)
 
   const labelWithTip = (labelText: string, tipText: string) => (
     <span>
@@ -64,16 +69,60 @@ const ModelTrainer: React.FC = () => {
     </span>
   )
 
+  // 参数默认值配置
+  const defaultParams = {
+    learning_rate: 0.1,
+    max_depth: 6,
+    num_leaves: 31,
+    subsample: 0.8
+  }
+
   useEffect(() => {
     dispatch(fetchModels())
+    dispatch(fetchTrainingTasks())
   }, [dispatch])
+
+  // 训练进度轮询 - 使用任务列表API
+  useEffect(() => {
+    // 检查是否有正在运行的任务
+    const hasRunningTasks = taskList.some(task =>
+      ['pending', 'running', 'cancelling'].includes(task.status)
+    )
+
+    if (hasRunningTasks) {
+      const interval = setInterval(() => {
+        dispatch(fetchTrainingTasks())
+      }, 2000) // 每2秒更新一次
+      setProgressInterval(interval)
+
+      return () => {
+        clearInterval(interval)
+        setProgressInterval(null)
+      }
+    } else if (progressInterval) {
+      clearInterval(progressInterval)
+      setProgressInterval(null)
+    }
+  }, [taskList, dispatch, progressInterval])
+
+  // 组件卸载时清理定时器
+  useEffect(() => {
+    return () => {
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
+    }
+  }, [progressInterval])
 
   const handleModelChange = (value: string) => {
     setSelectedModel(value)
-    // 获取模型参数
+    // 获取模型参数，如果没有则使用推荐默认值
     const model = models.find(m => m.name === value)
-    if (model) {
+    if (model && model.default_params) {
       form.setFieldsValue(model.default_params)
+    } else {
+      // 使用推荐的默认值
+      form.setFieldsValue(defaultParams)
     }
     // 获取模型性能数据
     if (value) {
@@ -88,6 +137,17 @@ const ModelTrainer: React.FC = () => {
 
   const handleTune = () => {
     dispatch(tuneHyperparameters({ modelName: selectedModel }))
+  }
+
+  const handleCancelTraining = (taskId: string) => {
+    dispatch(cancelTrainingTask(taskId)).then(() => {
+      // 取消后立即刷新任务列表
+      dispatch(fetchTrainingTasks())
+    })
+  }
+
+  const handleRefreshProgress = () => {
+    dispatch(fetchTrainingTasks())
   }
 
   const handleCompareModels = async () => {
@@ -166,23 +226,6 @@ const ModelTrainer: React.FC = () => {
     },
   ]
 
-  const performanceColumns = [
-    {
-      title: '指标',
-      dataIndex: 'metric',
-      key: 'metric',
-    },
-    {
-      title: '数值',
-      dataIndex: 'value',
-      key: 'value',
-      render: (value: number) => (
-        <Text style={{ fontFamily: 'monospace' }}>
-          {typeof value === 'number' ? value.toFixed(4) : value}
-        </Text>
-      ),
-    },
-  ]
 
 
   return (
@@ -233,34 +276,54 @@ const ModelTrainer: React.FC = () => {
 
                   {selectedModel && (
                     <>
-                      <Form.Item label={labelWithTip('学习率', '每次参数更新的步长，过大易震荡，过小收敛慢')} name="learning_rate">
+                      <Form.Item
+                        label={labelWithTip('学习率', '每次参数更新的步长，过大易震荡，过小收敛慢。推荐范围：0.01-0.3，默认：0.1')}
+                        name="learning_rate"
+                        initialValue={defaultParams.learning_rate}
+                      >
                         <InputNumber
                           min={0.001}
                           max={1}
                           step={0.01}
                           style={{ width: '100%' }}
+                          placeholder="推荐：0.1"
                         />
                       </Form.Item>
-                      <Form.Item label={labelWithTip('最大深度', '决策树最大深度，增大可拟合更复杂模式但易过拟合')} name="max_depth">
+                      <Form.Item
+                        label={labelWithTip('最大深度', '决策树最大深度，增大可拟合更复杂模式但易过拟合。推荐范围：3-10，默认：6')}
+                        name="max_depth"
+                        initialValue={defaultParams.max_depth}
+                      >
                         <InputNumber
                           min={3}
                           max={20}
                           style={{ width: '100%' }}
+                          placeholder="推荐：6"
                         />
                       </Form.Item>
-                      <Form.Item label={labelWithTip('叶子节点数', '树的叶子数量上限，数值越大模型复杂度越高')} name="num_leaves">
+                      <Form.Item
+                        label={labelWithTip('叶子节点数', '树的叶子数量上限，数值越大模型复杂度越高。推荐范围：15-100，默认：31')}
+                        name="num_leaves"
+                        initialValue={defaultParams.num_leaves}
+                      >
                         <InputNumber
                           min={10}
                           max={500}
                           style={{ width: '100%' }}
+                          placeholder="推荐：31"
                         />
                       </Form.Item>
-                      <Form.Item label={labelWithTip('子样本比例', '每次训练使用的数据子样本比例，有助于降低过拟合')} name="subsample">
+                      <Form.Item
+                        label={labelWithTip('子样本比例', '每次训练使用的数据子样本比例，有助于降低过拟合。推荐范围：0.6-1.0，默认：0.8')}
+                        name="subsample"
+                        initialValue={defaultParams.subsample}
+                      >
                         <InputNumber
                           min={0.1}
                           max={1}
                           step={0.1}
                           style={{ width: '100%' }}
+                          placeholder="推荐：0.8"
                         />
                       </Form.Item>
                     </>
@@ -291,54 +354,156 @@ const ModelTrainer: React.FC = () => {
           </Row>
         </TabPane>
 
-        <TabPane tab="性能评估" key="2">
+        <TabPane tab="训练进度" key="2">
           <Row gutter={[16, 16]}>
-            <Col xs={24} lg={12}>
-              <Card title="模型性能指标">
-                {!selectedModel ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <Text type="secondary">请先选择一个模型查看性能指标</Text>
-                  </div>
-                ) : !performance ? (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <Text type="secondary">暂无性能数据</Text>
-                  </div>
-                ) : (
-                  <Table
-                    columns={performanceColumns}
-                    dataSource={[
-                      { metric: '准确率', value: performance.accuracy },
-                      { metric: '精确率', value: performance.precision },
-                      { metric: '召回率', value: performance.recall },
-                      { metric: 'F1分数', value: performance.f1_score },
-                      { metric: '夏普比率', value: performance.sharpe_ratio },
-                      { metric: '最大回撤', value: performance.max_drawdown },
-                      { metric: '年化收益', value: performance.annual_return },
-                    ]}
-                    loading={loading}
-                    rowKey="metric"
-                    pagination={false}
+            <Col xs={24}>
+              <Card
+                title="训练任务列表"
+                extra={
+                  <Button
                     size="small"
-                  />
-                )}
-              </Card>
-            </Col>
-            <Col xs={24} lg={12}>
-              <Card title="训练进度">
-                <div style={{ marginBottom: 16 }}>
-                  <Text>当前训练进度</Text>
-                  <Progress
-                    percent={training ? 65 : 0}
-                    status={training ? 'active' : 'normal'}
-                  />
-                </div>
-                <div>
-                  <Text>超参数调优进度</Text>
-                  <Progress
-                    percent={training ? 45 : 0}
-                    status={training ? 'active' : 'normal'}
-                  />
-                </div>
+                    icon={<ReloadOutlined />}
+                    onClick={handleRefreshProgress}
+                  >
+                    刷新
+                  </Button>
+                }
+              >
+                <Table
+                  columns={[
+                    {
+                      title: '任务ID',
+                      dataIndex: 'task_id',
+                      key: 'task_id',
+                      width: 120,
+                      render: (id: string) => (
+                        <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                          {id.substring(0, 8)}...
+                        </Text>
+                      ),
+                    },
+                    {
+                      title: '模型',
+                      dataIndex: 'config',
+                      key: 'config',
+                      width: 100,
+                      render: (config: string) => (
+                        <Tag color="blue">{config}</Tag>
+                      ),
+                    },
+                    {
+                      title: '状态',
+                      dataIndex: 'status',
+                      key: 'status',
+                      width: 100,
+                      render: (status: string) => {
+                        const statusConfig = {
+                          pending: { color: 'default', text: '等待中' },
+                          running: { color: 'processing', text: '训练中' },
+                          completed: { color: 'success', text: '已完成' },
+                          failed: { color: 'error', text: '失败' },
+                          cancelled: { color: 'default', text: '已取消' },
+                          cancelling: { color: 'warning', text: '取消中' },
+                        }
+                        const config = statusConfig[status as keyof typeof statusConfig] || { color: 'default', text: status }
+                        return <Tag color={config.color}>{config.text}</Tag>
+                      },
+                    },
+                    {
+                      title: '进度',
+                      dataIndex: 'progress',
+                      key: 'progress',
+                      width: 250,
+                      render: (progress: number, record: any) => (
+                        <div>
+                          <Progress
+                            percent={progress}
+                            size="small"
+                            status={
+                              record.status === 'completed' ? 'success' :
+                              record.status === 'failed' ? 'exception' :
+                              record.status === 'cancelled' ? 'exception' :
+                              'active'
+                            }
+                          />
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {record.current_stage}
+                          </Text>
+                          {record.error && (
+                            <div style={{ marginTop: 4 }}>
+                              <Text type="danger" style={{ fontSize: 11 }}>
+                                错误: {record.error}
+                              </Text>
+                            </div>
+                          )}
+                        </div>
+                      ),
+                    },
+                    {
+                      title: '创建时间',
+                      dataIndex: 'created_at',
+                      key: 'created_at',
+                      width: 160,
+                      render: (time: string) => (
+                        <Text style={{ fontSize: 12 }}>
+                          {new Date(time).toLocaleString()}
+                        </Text>
+                      ),
+                    },
+                    {
+                      title: '更新时间',
+                      dataIndex: 'updated_at',
+                      key: 'updated_at',
+                      width: 160,
+                      render: (time: string) => (
+                        <Text style={{ fontSize: 12 }}>
+                          {new Date(time).toLocaleString()}
+                        </Text>
+                      ),
+                    },
+                    {
+                      title: '操作',
+                      key: 'action',
+                      width: 100,
+                      render: (_: any, record: any) => (
+                        <Space size="small">
+                          {record.status === 'running' && (
+                            <Button
+                              size="small"
+                              danger
+                              icon={<StopOutlined />}
+                              onClick={() => handleCancelTraining(record.task_id)}
+                            >
+                              取消
+                            </Button>
+                          )}
+                          {['completed', 'failed', 'cancelled'].includes(record.status) && (
+                            <Text type="secondary" style={{ fontSize: 12 }}>-</Text>
+                          )}
+                        </Space>
+                      ),
+                    },
+                  ]}
+                  dataSource={taskList}
+                  loading={loading}
+                  rowKey="task_id"
+                  pagination={{
+                    pageSize: 10,
+                    showSizeChanger: true,
+                    showTotal: (total) => `共 ${total} 个任务`,
+                  }}
+                  locale={{
+                    emptyText: (
+                      <div style={{ padding: '40px 0' }}>
+                        <Text type="secondary">暂无训练任务</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          请在"模型选择"标签页中启动训练任务
+                        </Text>
+                      </div>
+                    ),
+                  }}
+                />
               </Card>
             </Col>
           </Row>

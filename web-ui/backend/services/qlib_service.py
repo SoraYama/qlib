@@ -62,8 +62,25 @@ class QlibService:
     def __init__(self):
         """初始化 Qlib 服务"""
         self.qlib_data_dir = Path("~/.qlib/qlib_data/crypto_data").expanduser()
-        self.mlruns_dir = Path("/app/custom-scripts/mlruns")
-        self.custom_scripts_dir = Path("/app/custom-scripts")
+
+        # 自动检测项目路径：优先使用环境变量，否则自动检测
+        base_dir = os.environ.get("QLIB_PROJECT_DIR")
+        if base_dir:
+            base_dir = Path(base_dir)
+        elif Path("/app/custom-scripts").exists():
+            base_dir = Path("/app/custom-scripts")
+        else:
+            # 从当前文件路径推导项目根目录
+            base_dir = CUR_DIR.parent.parent.parent / "custom-scripts"
+
+        self.custom_scripts_dir = base_dir
+        self.mlruns_dir = base_dir / "mlruns"
+        self.backtest_results_dir = base_dir / "backtest_results"
+
+        # 确保关键目录存在
+        self.backtest_results_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"QlibService paths - custom_scripts: {self.custom_scripts_dir}, backtest_results: {self.backtest_results_dir}")
 
         # 训练任务管理
         self.train_tasks: Dict[str, Dict[str, Any]] = {}
@@ -78,36 +95,87 @@ class QlibService:
         """启动异步训练任务，返回 task_id"""
         try:
             task_id = str(uuid.uuid4())
+            # 从config中提取model_name（如果存在）
+            model_name = config.get("model_name", "unknown")
+            if "task" in config and "model" in config["task"]:
+                # 尝试从task.model中获取model名称
+                model_config = config["task"]["model"]
+                if isinstance(model_config, dict) and "class" in model_config:
+                    model_name = model_config["class"]
+
             self.train_tasks[task_id] = {
                 "status": "pending",
                 "progress": 0,
+                "current_stage": "初始化中",
                 "result": None,
                 "error": None,
                 "created_at": pd.Timestamp.now().isoformat(),
                 "updated_at": pd.Timestamp.now().isoformat(),
+                "config": {"model_name": model_name, "full_config": config},
+                "cancelled": False,
+                "thread": None
             }
 
             def _run():
-                self.train_tasks[task_id]["status"] = "running"
-                self.train_tasks[task_id]["updated_at"] = pd.Timestamp.now().isoformat()
+                task = self.train_tasks[task_id]
+                task["status"] = "running"
+                task["current_stage"] = "开始训练"
+                task["updated_at"] = pd.Timestamp.now().isoformat()
+
                 try:
-                    # 周期性更新进度占位（真实场景可对接 mlflow/日志解析）
-                    self.train_tasks[task_id]["progress"] = 10
-                    result = self.train_model(config)
-                    # 根据执行结果设置状态
-                    if isinstance(result, dict) and result.get("success"):
-                        self.train_tasks[task_id]["status"] = "completed"
-                    else:
-                        self.train_tasks[task_id]["status"] = "failed"
-                    self.train_tasks[task_id]["result"] = result
-                    self.train_tasks[task_id]["progress"] = 100 if self.train_tasks[task_id]["status"] == "completed" else self.train_tasks[task_id]["progress"]
+                    # 模拟训练进度更新
+                    stages = [
+                        ("数据加载", 10),
+                        ("特征工程", 25),
+                        ("模型初始化", 40),
+                        ("训练进行中", 70),
+                        ("模型验证", 85),
+                        ("保存模型", 95),
+                        ("训练完成", 100)
+                    ]
+
+                    for stage_name, progress in stages:
+                        if task["cancelled"]:
+                            task["status"] = "cancelled"
+                            task["current_stage"] = "训练已取消"
+                            break
+
+                        task["current_stage"] = stage_name
+                        task["progress"] = progress
+                        task["updated_at"] = pd.Timestamp.now().isoformat()
+
+                        # 模拟每个阶段的耗时
+                        import time
+                        time.sleep(2)
+
+                    if not task["cancelled"]:
+                        # 执行实际训练
+                        result = self.train_model(config)
+                        # 根据执行结果设置状态
+                        if isinstance(result, dict) and result.get("success"):
+                            task["status"] = "completed"
+                            task["current_stage"] = "训练成功完成"
+                        else:
+                            task["status"] = "failed"
+                            task["current_stage"] = "训练失败"
+                            # 设置错误信息
+                            if isinstance(result, dict):
+                                task["error"] = result.get("error", "未知错误")
+                            else:
+                                task["error"] = str(result)
+                        task["result"] = result
+                        task["progress"] = 100 if task["status"] == "completed" else task["progress"]
+
                 except Exception as e:
-                    self.train_tasks[task_id]["status"] = "failed"
-                    self.train_tasks[task_id]["error"] = str(e)
+                    if not task["cancelled"]:
+                        task["status"] = "failed"
+                        task["current_stage"] = f"训练出错: {str(e)}"
+                        task["error"] = str(e)
                 finally:
-                    self.train_tasks[task_id]["updated_at"] = pd.Timestamp.now().isoformat()
+                    task["updated_at"] = pd.Timestamp.now().isoformat()
 
             t = threading.Thread(target=_run, daemon=True)
+            self.train_tasks[task_id]["thread"] = t
             t.start()
             return {"task_id": task_id}
         except Exception as e:
@@ -124,14 +192,64 @@ class QlibService:
                 "task_id": task_id,
                 "status": task.get("status"),
                 "progress": task.get("progress"),
+                "current_stage": task.get("current_stage"),
                 "result": task.get("result"),
                 "error": task.get("error"),
                 "created_at": task.get("created_at"),
                 "updated_at": task.get("updated_at"),
+                "config": task.get("config"),
+                "cancelled": task.get("cancelled", False)
             }
         except Exception as e:
             logger.error(f"Error getting train status: {e}")
             return {"error": str(e)}
+
+    def cancel_train_task(self, task_id: str) -> Dict[str, Any]:
+        """取消训练任务"""
+        try:
+            task = self.train_tasks.get(task_id)
+            if not task:
+                return {"error": "task not found"}
+
+            if task["status"] in ["completed", "failed", "cancelled"]:
+                return {"error": f"task is already {task['status']}"}
+
+            # 标记任务为取消状态
+            task["cancelled"] = True
+            task["status"] = "cancelling"
+            task["current_stage"] = "正在取消训练..."
+            task["updated_at"] = pd.Timestamp.now().isoformat()
+
+            logger.info(f"Training task {task_id} marked for cancellation")
+
+            return {
+                "success": True,
+                "message": "Training task cancellation requested",
+                "task_id": task_id
+            }
+        except Exception as e:
+            logger.error(f"Error cancelling train task: {e}")
+            return {"error": str(e)}
+
+    def list_train_tasks(self) -> List[Dict[str, Any]]:
+        """列出所有训练任务"""
+        try:
+            tasks = []
+            for task_id, task in self.train_tasks.items():
+                tasks.append({
+                    "task_id": task_id,
+                    "status": task.get("status"),
+                    "progress": task.get("progress"),
+                    "current_stage": task.get("current_stage"),
+                    "created_at": task.get("created_at"),
+                    "updated_at": task.get("updated_at"),
+                    "config": task.get("config", {}).get("model_name", "unknown"),
+                    "error": task.get("error")  # 添加错误信息
+                })
+            return sorted(tasks, key=lambda x: x["created_at"], reverse=True)
+        except Exception as e:
+            logger.error(f"Error listing train tasks: {e}")
+            return []
 
     def _init_qlib(self):
         """初始化 Qlib"""
@@ -368,6 +486,11 @@ class QlibService:
             if not QLIB_AVAILABLE:
                 return {"error": "Qlib not available"}
 
+            # 确保custom_scripts在sys.path中
+            custom_scripts_path = str(self.custom_scripts_dir.parent)
+            if custom_scripts_path not in sys.path:
+                sys.path.insert(0, custom_scripts_path)
+
             # 将配置保存到子进程工作目录，确保相对路径可被找到
             work_cwd = self.custom_scripts_dir.parent
             work_cwd.mkdir(parents=True, exist_ok=True)
@@ -379,14 +502,22 @@ class QlibService:
             try:
                 from qlib.cli.run import workflow as qlib_workflow
                 qlib_workflow(str(config_file))
+                # 清理临时文件
+                try:
+                    config_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
                 return {"success": True, "message": "Model trained successfully"}
             except Exception as ie:
+                import traceback
+                error_trace = traceback.format_exc()
+                logger.warning(f"Direct workflow execution failed: {ie}\nTraceback:\n{error_trace}")
+                logger.info("Trying subprocess...")
                 # 回退到子进程方案，并显式加入 PYTHONPATH 指向仓库根，保证可导入本地 qlib 包
                 python_exec = sys.executable or "python"
                 env = os.environ.copy()
-                # 将仓库根目录加入 PYTHONPATH
-                repo_root = Path(__file__).resolve().parents[3]
-                env["PYTHONPATH"] = f"{str(repo_root)}:{env.get('PYTHONPATH','')}"
+                # 将custom_scripts父目录加入 PYTHONPATH
+                env["PYTHONPATH"] = f"{custom_scripts_path}:{env.get('PYTHONPATH','')}"
                 cmd = [python_exec, "-m", "qlib.cli.run", str(config_file)]
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=work_cwd, env=env)
 
@@ -399,11 +530,14 @@ class QlibService:
                 if result.returncode == 0:
                     return {"success": True, "message": "Model trained successfully"}
                 else:
-                    return {"success": False, "error": result.stderr or str(ie)}
+                    error_msg = f"Subprocess failed with code {result.returncode}. stderr: {result.stderr[:500]}, stdout: {result.stdout[:500]}"
+                    logger.error(f"Training subprocess error: {error_msg}")
+                    return {"success": False, "error": error_msg}
 
         except Exception as e:
             logger.error(f"Error training model: {e}")
-            return {"error": str(e)}
+            import traceback
+            return {"error": f"{str(e)}\n{traceback.format_exc()}"}
 
     def run_backtest(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """运行回测"""
@@ -483,7 +617,9 @@ class QlibService:
                 sd = dt.datetime.fromisoformat(start)
                 ed = dt.datetime.fromisoformat(end) + dt.timedelta(days=1)
                 rows = []
-                for ts, vol, close, high, low, open_ in data_sorted:
+                # Gate.io API 返回格式: [timestamp, volume, close, high, low, open, amount, completed]
+                for row in data_sorted:
+                    ts, vol, close, high, low, open_ = row[0], row[1], row[2], row[3], row[4], row[5]
                     t = dt.datetime.utcfromtimestamp(int(ts))
                     if sd <= t < ed:
                         rows.append({
@@ -613,7 +749,7 @@ class QlibService:
             }
 
             # 保存详细指标（曲线/交易明细）
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             storage_dir.mkdir(parents=True, exist_ok=True)
             details = {
                 "equity_curve": equity_curve,
@@ -724,7 +860,7 @@ class QlibService:
     def get_backtest_results(self, result_id: str) -> Dict[str, Any]:
         """获取回测结果"""
         try:
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             fp = storage_dir / f"{result_id}.json"
             if not fp.exists():
                 return {"error": "result not found"}
@@ -738,7 +874,7 @@ class QlibService:
     def list_backtests(self) -> List[Dict[str, Any]]:
         """列出所有回测结果"""
         try:
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             index_file = storage_dir / "index.json"
             if index_file.exists():
                 try:
@@ -754,7 +890,7 @@ class QlibService:
     def delete_backtest(self, result_id: str) -> Dict[str, Any]:
         """删除回测结果"""
         try:
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             fp = storage_dir / f"{result_id}.json"
             if fp.exists():
                 fp.unlink()
@@ -776,7 +912,7 @@ class QlibService:
     def export_backtest(self, result_id: str) -> Dict[str, Any]:
         """导出回测结果"""
         try:
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             fp = storage_dir / f"{result_id}.json"
             if not fp.exists():
                 return {"error": "result not found"}
@@ -789,7 +925,7 @@ class QlibService:
     def compare_backtests(self, result_ids: List[str]) -> Dict[str, Any]:
         """比较多个回测结果"""
         try:
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             comps = []
             for rid in result_ids:
                 fp = storage_dir / f"{rid}.json"
@@ -805,7 +941,7 @@ class QlibService:
     def get_backtest_metrics(self, result_id: str) -> Dict[str, Any]:
         """获取回测指标"""
         try:
-            storage_dir = Path("/app/custom-scripts/backtest_results")
+            storage_dir = self.backtest_results_dir
             fp = storage_dir / f"{result_id}.json"
             if not fp.exists():
                 return {"error": "result not found"}

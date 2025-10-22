@@ -22,5 +22,19 @@ fire==0.7.1
 gate-api==7.1.8
 
 # Qlib Dependencies
-qlib==0.0.2.dev20
+# qlib==0.0.2.dev20  # 注释掉，使用本地源代码
+setuptools_scm
+scipy
+scikit-learn
+tqdm
+ruamel.yaml
+mlflow
+lightgbm
+xgboost
+catboost
+torch
+ta-lib
+pydantic-settings
+gym
+empyrical-reloaded
 

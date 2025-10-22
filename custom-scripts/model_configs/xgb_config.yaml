@@ -1,7 +1,7 @@
 # XGBoost 模型配置
 model:
   class: XGBModel
-  module_path: qlib.contrib.model.gbdt
+  module_path: qlib.contrib.model.xgboost
   kwargs:
     # 基础参数
     objective: reg:squarederror

@@ -11,13 +11,13 @@ from flask import Blueprint, request, jsonify
 from loguru import logger
 import pandas as pd
 
-# Add custom-scripts directory to path
+# Add custom_scripts directory to path
 CUR_DIR = Path(__file__).resolve().parent
-# Try multiple possible paths for custom-scripts
+# Try multiple possible paths for custom_scripts
 possible_paths = [
     CUR_DIR.parent.parent.parent / 'custom-scripts',  # Original path
-    Path('/app/custom-scripts'),  # Docker container path
-    Path('./custom-scripts'),  # Relative path
+    Path('/app/custom_scripts'),  # Docker container path
+    Path('./custom_scripts'),  # Relative path
 ]
 
 for path in possible_paths:
@@ -26,9 +26,9 @@ for path in possible_paths:
         logger.info(f"Added to Python path: {path}")
         break
 else:
-    logger.warning("Could not find custom-scripts directory")
+    logger.warning("Could not find custom_scripts directory")
 
-from services.qlib_service import QlibService
+from shared_services import qlib_service
 try:
     from model_manager import ModelManager
 except ImportError:
@@ -45,7 +45,6 @@ except ImportError:
 bp = Blueprint('model', __name__)
 
 # Initialize services
-qlib_service = QlibService()
 model_manager = ModelManager()
 
 
@@ -220,6 +219,42 @@ def get_train_status(task_id):
         }), http_code
     except Exception as e:
         logger.error(f"Error getting train status: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route('/train/cancel/<task_id>', methods=['POST'])
+def cancel_train_task(task_id):
+    """取消训练任务"""
+    try:
+        result = qlib_service.cancel_train_task(task_id)
+        http_code = 200 if "error" not in result else 400
+        return jsonify({
+            "success": "error" not in result,
+            "data": result if "error" not in result else None,
+            "error": None if "error" not in result else result["error"]
+        }), http_code
+    except Exception as e:
+        logger.error(f"Error cancelling train task: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route('/train/tasks', methods=['GET'])
+def list_train_tasks():
+    """列出所有训练任务"""
+    try:
+        tasks = qlib_service.list_train_tasks()
+        return jsonify({
+            "success": True,
+            "data": tasks
+        })
+    except Exception as e:
+        logger.error(f"Error listing train tasks: {e}")
         return jsonify({
             "success": False,
             "error": str(e)

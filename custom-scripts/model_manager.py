@@ -137,6 +137,50 @@ class ModelManager:
         if model_name not in self.models:
             raise ValueError(f"Model {model_name} not found")
 
+        # 数据处理配置
+        data_handler_config = {
+            "start_time": "2024-01-01",
+            "end_time": "2025-10-12",
+            "fit_start_time": "2024-01-01",
+            "fit_end_time": "2024-08-31",
+            "instruments": "all",
+            "infer_processors": [
+                {"class": "RobustZScoreNorm", "kwargs": {"fields_group": "feature", "clip_outlier": True}},
+                {"class": "Fillna", "kwargs": {"fields_group": "feature"}}
+            ],
+            "learn_processors": [
+                {"class": "DropnaLabel"},
+                {"class": "CSRankNorm", "kwargs": {"fields_group": "label"}}
+            ],
+            "label": ["Ref($close, -2) / Ref($close, -1) - 1"]
+        }
+
+        # 回测配置
+        port_analysis_config = {
+            "strategy": {
+                "class": "TopkDropoutStrategy",
+                "module_path": "qlib.contrib.strategy",
+                "kwargs": {
+                    "signal": "<PRED>",
+                    "topk": 2,
+                    "n_drop": 0
+                }
+            },
+            "backtest": {
+                "start_time": "2024-12-01",
+                "end_time": "2025-10-10",
+                "account": 100000000,
+                "benchmark": "btcusdt",
+                "exchange_kwargs": {
+                    "limit_threshold": 0.095,
+                    "deal_price": "close",
+                    "open_cost": 0.001,
+                    "close_cost": 0.001,
+                    "min_cost": 0
+                }
+            }
+        }
+
         # 基础配置
         config = {
             "qlib_init": {
@@ -145,46 +189,8 @@ class ModelManager:
             },
             "market": "all",
             "benchmark": "btcusdt",
-            "data_handler_config": {
-                "start_time": "2024-01-01",
-                "end_time": "2025-10-12",
-                "fit_start_time": "2024-01-01",
-                "fit_end_time": "2024-08-31",
-                "instruments": "all",
-                "infer_processors": [
-                    {"class": "RobustZScoreNorm", "kwargs": {"fields_group": "feature", "clip_outlier": True}},
-                    {"class": "Fillna", "kwargs": {"fields_group": "feature"}}
-                ],
-                "learn_processors": [
-                    {"class": "DropnaLabel"},
-                    {"class": "CSRankNorm", "kwargs": {"fields_group": "label"}}
-                ],
-                "label": ["Ref($close, -2) / Ref($close, -1) - 1"]
-            },
-            "port_analysis_config": {
-                "strategy": {
-                    "class": "TopkDropoutStrategy",
-                    "module_path": "qlib.contrib.strategy",
-                    "kwargs": {
-                        "signal": "<PRED>",
-                        "topk": 2,
-                        "n_drop": 0
-                    }
-                },
-                "backtest": {
-                    "start_time": "2024-12-01",
-                    "end_time": "2025-10-10",
-                    "account": 100000000,
-                    "benchmark": "btcusdt",
-                    "exchange_kwargs": {
-                        "limit_threshold": 0.095,
-                        "deal_price": "close",
-                        "open_cost": 0.001,
-                        "close_cost": 0.001,
-                        "min_cost": 0
-                    }
-                }
-            },
+            "data_handler_config": data_handler_config,
+            "port_analysis_config": port_analysis_config,
             "task": {
                 "model": self.models[model_name]["model"],
                 "dataset": {
@@ -194,7 +200,7 @@ class ModelManager:
                         "handler": {
                             "class": "CryptoEnhancedHandler",
                             "module_path": "custom_scripts.crypto_enhanced_handler",
-                            "kwargs": "<data_handler_config>"
+                            "kwargs": data_handler_config
                         },
                         "segments": {
                             "train": ["2024-01-01", "2024-08-31"],
@@ -206,7 +212,7 @@ class ModelManager:
                 "record": [
                     {"class": "SignalRecord", "module_path": "qlib.workflow.record_temp", "kwargs": {}},
                     {"class": "SigAnaRecord", "module_path": "qlib.workflow.record_temp", "kwargs": {"ana_long_short": False, "ann_scaler": 365}},
-                    {"class": "PortAnaRecord", "module_path": "qlib.workflow.record_temp", "kwargs": {"config": "<port_analysis_config>"}}
+                    {"class": "PortAnaRecord", "module_path": "qlib.workflow.record_temp", "kwargs": {"config": port_analysis_config}}
                 ]
             }
         }

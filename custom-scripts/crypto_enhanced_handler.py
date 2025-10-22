@@ -32,7 +32,7 @@ class CryptoEnhancedHandler(Alpha158):
         learn_processors=None,
         fit_start_time=None,
         fit_end_time=None,
-        process_type=None,
+        process_type="append",  # 默认使用append模式
         filter_pipe=None,
         inst_processors=None,
         **kwargs,

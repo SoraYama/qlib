@@ -15,13 +15,10 @@ import pandas as pd
 CUR_DIR = Path(__file__).resolve().parent
 sys.path.append(str(CUR_DIR.parent.parent.parent / 'custom-scripts'))
 
-from services.qlib_service import QlibService
+from shared_services import qlib_service
 
 # Create blueprint
 bp = Blueprint('backtest', __name__)
-
-# Initialize service
-qlib_service = QlibService()
 
 
 @bp.route('/run', methods=['POST'])

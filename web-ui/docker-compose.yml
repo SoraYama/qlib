@@ -32,8 +32,8 @@ services:
   # Flask 后端服务
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: web-ui/backend/Dockerfile
     container_name: crypto_trading_backend
     ports:
       - "5000:5000"
@@ -103,8 +103,8 @@ services:
   # 数据采集服务
   data_collector:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: web-ui/backend/Dockerfile
     container_name: crypto_trading_data_collector
     command: python /app/custom-scripts/scheduler.py
     environment:
