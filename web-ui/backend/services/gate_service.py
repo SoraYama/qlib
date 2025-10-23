@@ -40,6 +40,7 @@ class GateService:
         # 交易状态相关属性
         self.is_running = False
         self.current_strategy = 'default'
+        self.current_model = 'lgb'  # 默认使用 LightGBM 模型
         self.risk_limits = {
             "max_position_size": 0.3,
             "max_drawdown": 0.2,
@@ -108,6 +109,7 @@ class GateService:
                 "stop_loss": 0.05
             }),
             "current_strategy": getattr(self, 'current_strategy', 'default'),
+            "current_model": getattr(self, 'current_model', 'lgb'),
             "last_update": datetime.now().isoformat()
         }
 
@@ -120,6 +122,7 @@ class GateService:
             # 设置交易状态
             self.is_running = True
             self.current_strategy = config.get('strategy_name', 'default')
+            self.current_model = config.get('model_name', 'lgb')  # 从配置中获取模型名称
 
             # 设置风险限制
             if 'risk_limits' in config:
@@ -141,7 +144,7 @@ class GateService:
             self.trading_logs.append({
                 "timestamp": datetime.now().isoformat(),
                 "level": "INFO",
-                "message": f"Trading started with config: {config}"
+                "message": f"Trading started with model: {self.current_model}, strategy: {self.current_strategy}, config: {config}"
             })
 
             return {
@@ -149,6 +152,7 @@ class GateService:
                 "message": "Trading started successfully. Background trading loop is running.",
                 "config": config,
                 "strategy_name": self.current_strategy,
+                "model_name": self.current_model,
                 "note": "Trading signals will be generated automatically based on market conditions."
             }
 

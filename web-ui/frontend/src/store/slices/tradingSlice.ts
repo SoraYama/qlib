@@ -27,6 +27,7 @@ export interface Order {
 export interface TradingStatus {
   is_running: boolean
   current_strategy: string
+  current_model: string
   risk_limits: {
     max_position_size: number
     max_drawdown: number
@@ -75,8 +76,8 @@ export const fetchTradingStatus = createAsyncThunk(
 
 export const startTrading = createAsyncThunk(
   'trading/startTrading',
-  async (config: { strategy_name: string; risk_limits: any }) => {
-    const response = await api.post('/trading/start', config)
+  async (config: { model_name?: string; strategy_name: string; risk_limits: any }) => {
+    const response = await api.post('/trading/start', { config })
     return response.data.data
   }
 )

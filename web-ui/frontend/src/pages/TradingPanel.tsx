@@ -13,7 +13,8 @@ import {
   Form,
   InputNumber,
   Modal,
-  Tabs
+  Tabs,
+  Select
 } from 'antd'
 import {
   PlayCircleOutlined,
@@ -21,7 +22,8 @@ import {
   SettingOutlined,
   DollarOutlined,
   ArrowUpOutlined,
-  ArrowDownOutlined
+  ArrowDownOutlined,
+  RobotOutlined
 } from '@ant-design/icons'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState, AppDispatch } from '../store'
@@ -56,6 +58,7 @@ const TradingPanel: React.FC = () => {
   } = useSelector((state: RootState) => state.trading)
 
   const [riskModalVisible, setRiskModalVisible] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('lgb')
   const [form] = Form.useForm()
 
   useEffect(() => {
@@ -79,6 +82,7 @@ const TradingPanel: React.FC = () => {
 
   const handleStartTrading = () => {
     const config = {
+      model_name: selectedModel,  // 传递选择的模型
       strategy_name: 'default_strategy',
       risk_limits: status?.risk_limits || {}
     }
@@ -260,7 +264,7 @@ const TradingPanel: React.FC = () => {
 
       {/* 交易状态卡片 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={8}>
+        <Col xs={24} sm={6}>
           <Card>
             <Statistic
               title="交易状态"
@@ -270,7 +274,20 @@ const TradingPanel: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={24} sm={6}>
+          <Card>
+            <Statistic
+              title="使用模型"
+              value={status?.current_model?.toUpperCase() || 'LGB'}
+              prefix={<RobotOutlined />}
+              valueStyle={{ color: '#1890ff', fontSize: '20px' }}
+            />
+            <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
+              策略: {status?.current_strategy || 'default'}
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={6}>
           <Card>
             <Statistic
               title="总资产"
@@ -281,7 +298,7 @@ const TradingPanel: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col xs={24} sm={8}>
+        <Col xs={24} sm={6}>
           <Card>
             <Statistic
               title="今日盈亏"
@@ -299,29 +316,47 @@ const TradingPanel: React.FC = () => {
       {/* 交易控制 */}
       <Card title="交易控制" style={{ marginBottom: 24 }}>
         <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} sm={12}>
-            <Space>
-              <Button
-                type="primary"
-                icon={<PlayCircleOutlined />}
-                loading={starting}
-                onClick={handleStartTrading}
-                disabled={status?.is_running}
-              >
-                启动交易
-              </Button>
-              <Button
-                danger
-                icon={<PauseCircleOutlined />}
-                loading={stopping}
-                onClick={handleStopTrading}
-                disabled={!status?.is_running}
-              >
-                停止交易
-              </Button>
+          <Col xs={24} md={12}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>
+                <Text strong style={{ marginRight: 8 }}>选择模型:</Text>
+                <Select
+                  value={selectedModel}
+                  onChange={setSelectedModel}
+                  disabled={status?.is_running}
+                  style={{ width: 200 }}
+                  options={[
+                    { label: 'LightGBM', value: 'lgb' },
+                    { label: 'XGBoost', value: 'xgb' },
+                    { label: 'CatBoost', value: 'catboost' },
+                    { label: 'LSTM', value: 'lstm' },
+                    { label: 'Transformer', value: 'transformer' }
+                  ]}
+                />
+              </div>
+              <Space>
+                <Button
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  loading={starting}
+                  onClick={handleStartTrading}
+                  disabled={status?.is_running}
+                >
+                  启动交易
+                </Button>
+                <Button
+                  danger
+                  icon={<PauseCircleOutlined />}
+                  loading={stopping}
+                  onClick={handleStopTrading}
+                  disabled={!status?.is_running}
+                >
+                  停止交易
+                </Button>
+              </Space>
             </Space>
           </Col>
-          <Col xs={24} sm={12} style={{ textAlign: 'right' }}>
+          <Col xs={24} md={12} style={{ textAlign: 'right' }}>
             <Button
               icon={<SettingOutlined />}
               onClick={() => setRiskModalVisible(true)}
@@ -330,6 +365,14 @@ const TradingPanel: React.FC = () => {
             </Button>
           </Col>
         </Row>
+        {status?.is_running && (
+          <Alert
+            message={`当前正在使用 ${status.current_model?.toUpperCase()} 模型进行实盘交易`}
+            type="info"
+            showIcon
+            style={{ marginTop: 16 }}
+          />
+        )}
       </Card>
 
       {/* 详细数据 */}

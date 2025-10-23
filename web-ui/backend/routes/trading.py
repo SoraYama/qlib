@@ -47,6 +47,7 @@ def start_trading():
         # 默认配置
         default_config = {
             "model_name": "lgb",
+            "strategy_name": "default",
             "initial_capital": 10000,
             "max_position_size": 0.3,
             "stop_loss": 0.05,
@@ -56,6 +57,7 @@ def start_trading():
         # 合并配置
         config = {**default_config, **config}
 
+        logger.info(f"Starting trading with config: {config}")
         result = gate_service.start_trading(config)
 
         return jsonify({

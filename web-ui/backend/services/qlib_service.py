@@ -367,6 +367,13 @@ class QlibService:
     def update_price_data(self) -> Dict[str, Any]:
         """更新价格数据"""
         try:
+            from datetime import datetime, timedelta
+
+            # 动态计算日期范围：从2024-01-01到昨天
+            today = datetime.now()
+            yesterday = today - timedelta(days=1)
+            end_date = yesterday.strftime("%Y-%m-%d")
+
             # 运行 Gate.io 数据采集器
             cmd = [
                 "python",
@@ -374,13 +381,18 @@ class QlibService:
                 "download_data",
                 "--source_dir", str(self.custom_scripts_dir.parent / "data" / "gate" / "source"),
                 "--start", "2024-01-01",
-                "--end", "2025-10-12"
+                "--end", end_date  # 使用动态日期
             ]
 
+            logger.info(f"Updating price data from 2024-01-01 to {end_date}")
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.custom_scripts_dir.parent)
 
             if result.returncode == 0:
-                return {"success": True, "message": "Price data updated successfully"}
+                return {
+                    "success": True,
+                    "message": f"Price data updated successfully to {end_date}",
+                    "end_date": end_date
+                }
             else:
                 return {"success": False, "error": result.stderr}
 
@@ -391,6 +403,13 @@ class QlibService:
     def update_onchain_data(self) -> Dict[str, Any]:
         """更新链上数据"""
         try:
+            from datetime import datetime, timedelta
+
+            # 动态计算日期范围：从2024-01-01到昨天
+            today = datetime.now()
+            yesterday = today - timedelta(days=1)
+            end_date = yesterday.strftime("%Y-%m-%d")
+
             # 运行链上数据采集器
             cmd = [
                 "python",
@@ -398,13 +417,18 @@ class QlibService:
                 "download_data",
                 "--source_dir", str(self.custom_scripts_dir.parent / "data" / "onchain" / "source"),
                 "--start", "2024-01-01",
-                "--end", "2025-10-12"
+                "--end", end_date  # 使用动态日期
             ]
 
+            logger.info(f"Updating onchain data from 2024-01-01 to {end_date}")
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.custom_scripts_dir.parent)
 
             if result.returncode == 0:
-                return {"success": True, "message": "Onchain data updated successfully"}
+                return {
+                    "success": True,
+                    "message": f"Onchain data updated successfully to {end_date}",
+                    "end_date": end_date
+                }
             else:
                 return {"success": False, "error": result.stderr}
 
@@ -415,6 +439,13 @@ class QlibService:
     def update_news_data(self) -> Dict[str, Any]:
         """更新新闻数据"""
         try:
+            from datetime import datetime, timedelta
+
+            # 动态计算日期范围：从2024-01-01到昨天
+            today = datetime.now()
+            yesterday = today - timedelta(days=1)
+            end_date = yesterday.strftime("%Y-%m-%d")
+
             # 运行新闻数据采集器
             cmd = [
                 "python",
@@ -422,13 +453,18 @@ class QlibService:
                 "download_data",
                 "--source_dir", str(self.custom_scripts_dir.parent / "data" / "news" / "source"),
                 "--start", "2024-01-01",
-                "--end", "2025-10-12"
+                "--end", end_date  # 使用动态日期
             ]
 
+            logger.info(f"Updating news data from 2024-01-01 to {end_date}")
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=self.custom_scripts_dir.parent)
 
             if result.returncode == 0:
-                return {"success": True, "message": "News data updated successfully"}
+                return {
+                    "success": True,
+                    "message": f"News data updated successfully to {end_date}",
+                    "end_date": end_date
+                }
             else:
                 return {"success": False, "error": result.stderr}
 
