@@ -168,11 +168,21 @@ class GateService:
                 logger.info("Trading loop iteration - checking for trading opportunities...")
 
                 # 1. 获取市场数据
-                market_data = self.get_spot_klines('BTC_USDT', '15m', 100)
+                try:
+                    logger.info("Fetching market data for BTC_USDT...")
+                    market_data = self.get_spot_klines('BTC_USDT', '15m', 100)
+                    logger.info(f"get_spot_klines returned: {type(market_data)}, length: {len(market_data) if market_data else 0}")
+                except Exception as fetch_error:
+                    logger.error(f"Error fetching market data: {fetch_error}", exc_info=True)
+                    time.sleep(60)
+                    continue
+
                 if not market_data:
                     logger.warning("No market data available")
                     time.sleep(60)
                     continue
+
+                logger.info(f"Successfully fetched {len(market_data)} candles")
 
                 # 2. 生成简单的交易信号（示例：基于价格变化）
                 # 注意：这是一个简化示例，实际应该使用训练好的模型
@@ -183,21 +193,59 @@ class GateService:
 
                     # 3. 应用风险控制
                     if self._check_risk_limits():
-                        # 4. 执行交易（演示模式：只记录不实际执行）
-                        self.trading_logs.append({
-                            "timestamp": datetime.now().isoformat(),
-                            "level": "INFO",
-                            "message": f"Trading signal detected: {signal['action']} at {signal.get('price', 'market')} (DEMO MODE - not executed)"
-                        })
-                        logger.info(f"Demo mode: Would execute {signal['action']} order")
+                        # 4. 执行交易 - 实际调用下单API
+                        try:
+                            # 计算下单数量 - Gate.io期货合约以张数计价，每张=1 USD
+                            # 例如：买入100张BTC_USDT合约 = 买入价值100 USD的BTC
+                            # 简单示例：固定下单100张(约100 USD)
+                            order_amount = 100  # 100张合约
+
+                            logger.info(f"Placing order: {signal['action']} {order_amount} contracts at {signal['price']}")
+
+                            order_result = self.place_order(
+                                currency_pair='BTC_USDT',
+                                side=signal['action'],
+                                amount=order_amount,
+                                price=signal['price'],
+                                order_type='limit'
+                            )
+
+                            if order_result.get('success'):
+                                logger.info(f"Order placed successfully: {order_result}")
+                                self.trading_logs.append({
+                                    "timestamp": datetime.now().isoformat(),
+                                    "level": "INFO",
+                                    "message": f"Order executed: {signal['action']} {order_amount} contracts at {signal['price']}, Order ID: {order_result.get('order_id')}"
+                                })
+                            else:
+                                logger.error(f"Order failed: {order_result.get('error')}")
+                                self.trading_logs.append({
+                                    "timestamp": datetime.now().isoformat(),
+                                    "level": "ERROR",
+                                    "message": f"Order failed: {order_result.get('error')}"
+                                })
+                        except Exception as order_error:
+                            logger.error(f"Error placing order: {order_error}")
+                            self.trading_logs.append({
+                                "timestamp": datetime.now().isoformat(),
+                                "level": "ERROR",
+                                "message": f"Order execution error: {str(order_error)}"
+                            })
                     else:
                         logger.warning("Signal rejected by risk controls")
+                        self.trading_logs.append({
+                            "timestamp": datetime.now().isoformat(),
+                            "level": "WARNING",
+                            "message": f"Signal rejected by risk controls: {signal}"
+                        })
+                else:
+                    logger.info("No signal generated in this iteration")
 
                 # 等待下一次迭代
                 time.sleep(prediction_interval)
 
             except Exception as e:
-                logger.error(f"Error in trading loop: {e}")
+                logger.error(f"Error in trading loop: {e}", exc_info=True)
                 time.sleep(60)  # 出错后等待1分钟再重试
 
         logger.info("Trading loop stopped")
@@ -206,6 +254,7 @@ class GateService:
         """生成简单的交易信号（演示用）"""
         try:
             if len(market_data) < 20:
+                logger.warning(f"Not enough market data: {len(market_data)} candles")
                 return None
 
             # 计算简单移动平均
@@ -214,22 +263,25 @@ class GateService:
             ma_long = sum(recent_prices[-20:]) / 20
             current_price = recent_prices[-1]
 
-            # 简单的金叉/死叉策略
-            if ma_short > ma_long * 1.01:  # 短期均线上穿长期均线
+            logger.info(f"Signal check - Current: {current_price:.2f}, MA5: {ma_short:.2f}, MA20: {ma_long:.2f}, Diff: {((ma_short/ma_long - 1) * 100):.3f}%")
+
+            # 简单的金叉/死叉策略 - 降低阈值到0.3%以更容易触发
+            if ma_short > ma_long * 1.003:  # 短期均线比长期均线高0.3%以上
                 return {
                     "action": "buy",
                     "symbol": "BTC_USDT",
                     "price": current_price,
-                    "reason": "MA crossover bullish"
+                    "reason": f"MA crossover bullish (MA5: {ma_short:.2f} > MA20: {ma_long:.2f})"
                 }
-            elif ma_short < ma_long * 0.99:  # 短期均线下穿长期均线
+            elif ma_short < ma_long * 0.997:  # 短期均线比长期均线低0.3%以上
                 return {
                     "action": "sell",
                     "symbol": "BTC_USDT",
                     "price": current_price,
-                    "reason": "MA crossover bearish"
+                    "reason": f"MA crossover bearish (MA5: {ma_short:.2f} < MA20: {ma_long:.2f})"
                 }
 
+            logger.info("No trading signal generated (MA差异不足0.3%)")
             return None
 
         except Exception as e:
@@ -248,15 +300,17 @@ class GateService:
                 return False
 
             # 检查账户余额
-            balance = self.get_account_balance()
-            if balance.get('available_balance', 0) < 100:  # 最少保留100 USDT
-                logger.warning("Insufficient balance")
+            account_info = self.get_account_info()
+            available_balance = account_info.get('available_balance', 0)
+            if available_balance < 100:  # 最少保留100 USDT
+                logger.warning(f"Insufficient balance: {available_balance} USDT")
                 return False
 
+            logger.info(f"Risk check passed - Positions: {len(positions)}, Available: {available_balance} USDT")
             return True
 
         except Exception as e:
-            logger.error(f"Error checking risk limits: {e}")
+            logger.error(f"Error checking risk limits: {e}", exc_info=True)
             return False
 
     def stop_trading(self) -> Dict[str, Any]:
@@ -660,18 +714,28 @@ class GateService:
             else:
                 size = abs(size)
 
-            # 组装期货订单对象
-            fut_order = gate_api.FuturesOrder()
-            fut_order.contract = contract
-            fut_order.size = str(size)
+            # 组装期货订单对象 - 注意gate_api要求在构造函数中传入必需参数
+            logger.info(f"Creating futures order: contract={contract}, size={size}, side={side}")
+
+            # 准备订单参数
+            order_params = {
+                'contract': contract,
+                'size': int(size)  # size需要是整数(合约张数)
+            }
+
             # 价格与订单类型
             if order_type == "limit" and price is not None:
-                fut_order.price = str(price)
-                fut_order.tif = "gtc"
+                order_params['price'] = str(price)
+                order_params['tif'] = "gtc"
             else:
                 # 市价单：部分接口用 price=0 且 tif=ioc
-                fut_order.price = "0"
-                fut_order.tif = "ioc"
+                order_params['price'] = "0"
+                order_params['tif'] = "ioc"
+
+            logger.info(f"Order params: {order_params}")
+            fut_order = gate_api.FuturesOrder(**order_params)
+            logger.info(f"Futures order created: contract={fut_order.contract}, size={fut_order.size}")
+
             # 可根据需要设置：reduce_only/close/auto_size 等，这里默认开仓
 
             created = self.futures_api.create_futures_order(settle='usdt', futures_order=fut_order)
@@ -691,7 +755,7 @@ class GateService:
             }
 
         except Exception as e:
-            logger.error(f"Error placing order: {e}")
+            logger.error(f"Error placing order: {e}", exc_info=True)
             self.trading_logs.append({
                 "timestamp": datetime.now().isoformat(),
                 "level": "ERROR",
