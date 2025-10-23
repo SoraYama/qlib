@@ -112,8 +112,16 @@ def get_orders():
     try:
         limit = request.args.get('limit', 100)
         offset = request.args.get('offset', 0)
+        status = request.args.get('status', 'finished')  # 'open', 'finished', 或 'all'
 
-        orders = gate_service.get_orders(limit=int(limit), offset=int(offset))
+        # 如果请求查询所有状态的订单
+        if status == 'all':
+            open_orders = gate_service.get_orders(limit=int(limit), offset=int(offset), status='open')
+            finished_orders = gate_service.get_orders(limit=int(limit), offset=int(offset), status='finished')
+            orders = open_orders + finished_orders
+        else:
+            orders = gate_service.get_orders(limit=int(limit), offset=int(offset), status=status)
+
         return jsonify({
             "success": True,
             "data": orders
